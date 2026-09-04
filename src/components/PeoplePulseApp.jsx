@@ -1972,6 +1972,19 @@ function EmployeeDashboard({ setMobileOpen, setView }) {
   const latest = history[0];
   const previous = history[1];
 
+  const resolveSentiment = (c) => {
+    const rawLabel = c?.sentiment_results?.sentiment_label;
+    if (rawLabel) {
+      return rawLabel.charAt(0).toUpperCase() + rawLabel.slice(1).toLowerCase();
+    }
+    const score = c?.sentiment_results?.engagement_score != null
+      ? Number(c.sentiment_results.engagement_score)
+      : calculateEngagementScore(c);
+    if (score >= 70) return "Positive";
+    if (score >= 50) return "Neutral";
+    return "Needs Attention";
+  };
+
   const latestScore = hasRealData
     ? (latest.sentiment_results?.engagement_score != null
         ? Math.round(Number(latest.sentiment_results.engagement_score))
@@ -1988,9 +2001,7 @@ function EmployeeDashboard({ setMobileOpen, setView }) {
   const stressVal = hasRealData ? Number(latest.stress_level) : (user ? "—" : 2.1);
   const streak = hasRealData ? history.length : (user ? 0 : 6);
   const sentimentVal = hasRealData
-    ? (latest.sentiment_results?.sentiment_label
-        ? latest.sentiment_results.sentiment_label.charAt(0).toUpperCase() + latest.sentiment_results.sentiment_label.slice(1)
-        : "Pending")
+    ? resolveSentiment(latest)
     : (user ? "—" : "Positive");
 
   const trendData = hasRealData
@@ -2003,17 +2014,22 @@ function EmployeeDashboard({ setMobileOpen, setView }) {
     : (user ? [] : engagementTrend);
 
   const displayList = hasRealData
-    ? history.map((c) => ({
-        date: formatWeekLabel(c.week_start) || c.week_start,
-        engagement: c.sentiment_results?.engagement_score != null
+    ? history.map((c) => {
+        const sentiment = resolveSentiment(c);
+        const score = c.sentiment_results?.engagement_score != null
           ? Math.round(Number(c.sentiment_results.engagement_score))
-          : calculateEngagementScore(c),
-        stress: `${c.stress_level} / 5`,
-        sentiment: c.sentiment_results?.sentiment_label
-          ? c.sentiment_results.sentiment_label.charAt(0).toUpperCase() + c.sentiment_results.sentiment_label.slice(1)
-          : "Pending",
-      }))
+          : calculateEngagementScore(c);
+        return {
+          date: formatWeekLabel(c.week_start) || c.week_start,
+          engagement: score,
+          stress: `${c.stress_level} / 5`,
+          sentiment,
+        };
+      })
     : (user ? [] : myCheckins);
+
+  const sentimentColor = sentimentVal === "Positive" ? "#3F7A5C" : sentimentVal === "Neutral" ? "#9A6B1E" : "#A3392F";
+  const sentimentBg = sentimentVal === "Positive" ? T.positiveBg : sentimentVal === "Neutral" ? T.amberBg : T.negativeBg;
 
   return (
     <div>
@@ -2038,19 +2054,16 @@ function EmployeeDashboard({ setMobileOpen, setView }) {
         <Card interactive>
           <p className="text-xs uppercase tracking-wider font-semibold" style={{ color: T.muted }}>Latest sentiment</p>
           <div className="flex items-baseline gap-1 mt-2">
-            <span className="text-3xl font-extrabold tracking-tight" style={{ color: sentimentVal === "Positive" ? "#3F7A5C" : T.text }}>
+            <span className="text-3xl font-extrabold tracking-tight" style={{ color: sentimentColor }}>
               {sentimentVal}
             </span>
           </div>
           <div className="mt-3 min-h-[24px] flex items-center">
             <span
               className="text-xs font-semibold px-2.5 py-0.5 rounded-full inline-flex items-center gap-1.5"
-              style={{
-                background: sentimentVal === "Positive" ? T.positiveBg : "#F1F2F4",
-                color: sentimentVal === "Positive" ? "#3F7A5C" : T.muted,
-              }}
+              style={{ background: sentimentBg, color: sentimentColor }}
             >
-              <span className="w-1.5 h-1.5 rounded-full" style={{ background: sentimentVal === "Positive" ? "#3F7A5C" : "#9CA3AF" }} />
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: sentimentColor }} />
               {sentimentVal}
             </span>
           </div>
@@ -2073,22 +2086,43 @@ function EmployeeDashboard({ setMobileOpen, setView }) {
         {displayList.length === 0 ? (
           <p className="text-sm py-4 text-center" style={{ color: T.muted }}>No identified check-ins yet. Submit your daily check-in to see your history.</p>
         ) : (
-          displayList.map((c, i) => (
-            <div key={i} className="flex items-center justify-between py-2.5 border-b last:border-0" style={{ borderColor: T.border }}>
-              <span className="text-sm font-medium" style={{ color: T.text }}>{c.date}</span>
-              <span className="text-sm" style={{ color: T.muted }}>Score: {c.engagement}</span>
-              <span className="text-sm" style={{ color: T.muted }}>Stress: {c.stress}</span>
-              <span
-                className="text-xs font-medium px-2.5 py-1 rounded-full"
-                style={{
-                  background: c.sentiment === "Positive" ? T.positiveBg : "#F1F2F4",
-                  color: c.sentiment === "Positive" ? "#3F7A5C" : T.muted,
-                }}
-              >
-                {c.sentiment}
-              </span>
-            </div>
-          ))
+          <div className="space-y-2">
+            {displayList.map((c, i) => {
+              const isPos = c.sentiment === "Positive";
+              const isNeut = c.sentiment === "Neutral";
+              const fg = isPos ? "#3F7A5C" : isNeut ? "#9A6B1E" : "#A3392F";
+              const bg = isPos ? T.positiveBg : isNeut ? T.amberBg : T.negativeBg;
+
+              return (
+                <div
+                  key={i}
+                  className="flex items-center justify-between p-3 rounded-xl border transition-all hover:bg-gray-50/80"
+                  style={{ borderColor: T.border }}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-9 h-9 rounded-xl bg-[#EEF1FA] text-[#4E6ABF] font-bold text-xs flex items-center justify-center shrink-0">
+                      {c.date.slice(0, 3)}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold truncate" style={{ color: T.text }}>{c.date}</p>
+                      <div className="flex items-center gap-2 text-xs text-gray-500 mt-0.5">
+                        <span>Score: <b className="text-gray-700 font-semibold">{c.engagement}</b></span>
+                        <span>•</span>
+                        <span>Stress: <b className="text-gray-700 font-semibold">{c.stress}</b></span>
+                      </div>
+                    </div>
+                  </div>
+                  <span
+                    className="text-xs font-semibold px-2.5 py-1 rounded-full shrink-0 inline-flex items-center gap-1.5"
+                    style={{ background: bg, color: fg }}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full" style={{ background: fg }} />
+                    {c.sentiment}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
         )}
       </Card>
     </div>
