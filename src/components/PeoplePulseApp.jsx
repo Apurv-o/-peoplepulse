@@ -610,7 +610,11 @@ export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoT
       }
     } catch (err) {
       console.error("[Auth Error]", err);
-      setAuthError(err.message || "Authentication failed. Please verify your credentials.");
+      if (err.message?.toLowerCase().includes("rate limit")) {
+        setAuthError("Supabase default email rate limit reached (max 3 emails/hr). Please switch to 'Sign In' if you already registered, or disable 'Confirm email' in Supabase Dashboard -> Authentication -> Providers -> Email.");
+      } else {
+        setAuthError(err.message || "Authentication failed. Please verify your credentials.");
+      }
     } finally {
       setLoading(false);
     }
