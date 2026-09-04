@@ -1,0 +1,34 @@
+﻿# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment & Secrets (NEVER COMMIT)
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Dependencies & Build Outputs
+node_modules/
+dist/
+dist-ssr/
+
+# Editor & OS files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local diagnostic scripts
+pp_cdp_test.mjs
+pp_demo_smoke.mjs
+test_daily_flow.mjs
+
+# Supabase local temp
+supabase/.temp
+supabase/.branches
