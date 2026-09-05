@@ -2744,7 +2744,7 @@ function EmployeeCheckin({ setMobileOpen, onSubmitted }) {
           return;
         }
 
-        const todayDate = new Date().toISOString().slice(0, 10);
+        const todayDate = getTodayDate();
         const checkinId = crypto.randomUUID();
         const processingToken = anon ? crypto.randomUUID() : null;
 
@@ -2820,20 +2820,27 @@ function EmployeeCheckin({ setMobileOpen, onSubmitted }) {
         // Broadcast instant pulse event across active organization dashboard tabs
         try {
           const broadcastChannel = supabase.channel(`org-pulse-${targetOrgId}`);
-          broadcastChannel.subscribe((status) => {
-            if (status === "SUBSCRIBED") {
-              broadcastChannel.send({
-                type: "broadcast",
-                event: "checkin_submitted",
-                payload: {
-                  teamId: currentTeamId,
-                  organizationId: targetOrgId,
-                  isAnonymous: Boolean(anon),
-                  timestamp: new Date().toISOString(),
-                },
-              });
-            }
-          });
+          const sendPulse = () => {
+            broadcastChannel.send({
+              type: "broadcast",
+              event: "checkin_submitted",
+              payload: {
+                teamId: currentTeamId,
+                organizationId: targetOrgId,
+                isAnonymous: Boolean(anon),
+                timestamp: new Date().toISOString(),
+              },
+            });
+          };
+          if (broadcastChannel.state === "joined" || broadcastChannel.state === "subscribed") {
+            sendPulse();
+          } else {
+            broadcastChannel.subscribe((status) => {
+              if (status === "SUBSCRIBED") {
+                sendPulse();
+              }
+            });
+          }
         } catch (bErr) {
           console.warn("[Broadcast Diagnostic]", bErr);
         }
@@ -3284,7 +3291,9 @@ function AdminDashboard({ setMobileOpen }) {
     if (!supabase || !activeOrganizationId) return;
     try {
       setLoadingTeams(true);
-      const today = getTodayDate();
+      const localToday = getTodayDate();
+      const utcToday = new Date().toISOString().slice(0, 10);
+      const past24hIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
       // 0. Fetch live team count and active member count directly
       const [{ count: tCount }, { count: mCount }] = await Promise.all([
@@ -3302,17 +3311,43 @@ function AdminDashboard({ setMobileOpen }) {
       if (tCount !== null && tCount !== undefined) setLiveTeamCount(tCount);
       if (mCount !== null && mCount !== undefined) setLiveMemberCount(mCount);
 
-      // 1. Fetch today's check-ins count
-      supabase
-        .from("checkins")
-        .select("id", { count: "exact", head: true })
-        .eq("organization_id", activeOrganizationId)
-        .eq("week_start", today)
-        .then(({ count, error }) => {
-          if (!error && count !== null) {
-            setTodayCheckins(count);
+      // 1. Fetch real-time daily participation (try security-definer RPC first for anonymous + named count)
+      let participationLoaded = false;
+      try {
+        const { data: partData, error: partErr } = await supabase.rpc(
+          "get_org_today_participation",
+          {
+            p_org_id: activeOrganizationId,
+            p_local_date: localToday,
           }
-        });
+        );
+        if (!partErr && partData && typeof partData.today_checkins === "number") {
+          setTodayCheckins(partData.today_checkins);
+          if (typeof partData.active_members === "number" && partData.active_members > 0) {
+            setLiveMemberCount(partData.active_members);
+          }
+          participationLoaded = true;
+        }
+      } catch (rpcErr) {
+        // Fall back gracefully to direct query
+      }
+
+      // Fallback: Direct query with timezone resiliency (local date, UTC date, or past 24 hours)
+      if (!participationLoaded) {
+        try {
+          const { count: cCount, error: cErr } = await supabase
+            .from("checkins")
+            .select("id", { count: "exact", head: true })
+            .eq("organization_id", activeOrganizationId)
+            .or(`week_start.in.(${localToday},${utcToday}),created_at.gte.${past24hIso}`);
+
+          if (!cErr && cCount !== null) {
+            setTodayCheckins(cCount);
+          }
+        } catch (queryErr) {
+          console.warn("[Daily Participation Query Fallback]", queryErr);
+        }
+      }
 
       // 2. Fetch real-time team comparison, org score, and sentiment breakdown
       const { data, error } = await supabase.rpc("get_org_team_comparison", {
@@ -3345,9 +3380,9 @@ function AdminDashboard({ setMobileOpen }) {
 
     if (!supabase || !activeOrganizationId) return;
 
-    // Real-time Postgres changes subscription
+    // Multi-layer Real-Time Subscriptions: Database WAL (checkins, teams, organizations, members) + Broadcast channel
     const channel = supabase
-      .channel(`admin-dashboard-${activeOrganizationId}`)
+      .channel(`org-pulse-${activeOrganizationId}`)
       .on(
         "postgres_changes",
         {
@@ -3377,6 +3412,18 @@ function AdminDashboard({ setMobileOpen }) {
         {
           event: "*",
           schema: "public",
+          table: "organizations",
+          filter: `id=eq.${activeOrganizationId}`,
+        },
+        () => {
+          loadDashboardData();
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
           table: "organization_members",
           filter: `organization_id=eq.${activeOrganizationId}`,
         },
@@ -3384,10 +3431,24 @@ function AdminDashboard({ setMobileOpen }) {
           loadDashboardData();
         }
       )
+      // Immediate broadcast channel from active client submissions across all tabs
+      .on(
+        "broadcast",
+        { event: "checkin_submitted" },
+        () => {
+          loadDashboardData();
+        }
+      )
       .subscribe();
+
+    // Fast polling fallback (every 10 seconds) to ensure real-time participation never drifts
+    const interval = setInterval(() => {
+      loadDashboardData();
+    }, 10000);
 
     return () => {
       supabase.removeChannel(channel);
+      clearInterval(interval);
     };
   }, [activeOrganizationId, loadDashboardData]);
 
@@ -3421,6 +3482,12 @@ function AdminDashboard({ setMobileOpen }) {
           unit={todayCheckins !== null ? `${todayCheckins} / ${memberCount}` : ""}
           delta={3.5}
           goodDirection="up"
+          extra={
+            <div className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/60 w-fit">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span>Realtime</span>
+            </div>
+          }
         />
         <KPICard
           label="Org. engagement"
