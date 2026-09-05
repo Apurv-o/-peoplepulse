@@ -1393,20 +1393,29 @@ function ManagerDashboard({ setMobileOpen, setView }) {
             )}
           </div>
         </Card>
-        <Card interactive>
-          <p className="text-xs uppercase tracking-wider font-semibold" style={{ color: T.muted }}>Anonymous Privacy</p>
+        <Card interactive onClick={() => setView?.("manager-insights")}>
+          <div className="flex items-center justify-between">
+            <p className="text-xs uppercase tracking-wider font-semibold" style={{ color: T.muted }}>Anonymous Privacy</p>
+            <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              Active (n ≥ 3)
+            </span>
+          </div>
           <div className="flex items-baseline gap-1 mt-2">
-            <span className="text-3xl font-extrabold tracking-tight" style={{ color: T.text }}>Strict</span>
+            <span className="text-2xl font-extrabold tracking-tight text-[#1F2A28]">100% Protected</span>
           </div>
           <div className="mt-3 flex items-center justify-between">
-            <span className="text-[11px] font-medium text-emerald-700 flex items-center gap-1">
-              <ShieldCheck size={13} /> user_id = NULL
+            <span className="text-[11px] font-medium text-emerald-700 flex items-center gap-1.5" title="Author identity is detached from submissions and protected by a 3-person minimum cohort threshold">
+              <ShieldCheck size={14} className="text-emerald-600 shrink-0" /> Zero Identity Tracking
             </span>
             <button
-              onClick={() => setView?.("manager-insights")}
-              className="text-xs font-semibold flex items-center gap-1 hover:underline text-blue-600 transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                setView?.("manager-insights");
+              }}
+              className="text-xs font-semibold flex items-center gap-1 hover:underline text-[#4E6ABF] transition-colors"
             >
-              Insights <ArrowRight size={12} />
+              Privacy Model <ArrowRight size={12} />
             </button>
           </div>
         </Card>
@@ -1451,8 +1460,19 @@ function ManagerDashboard({ setMobileOpen, setView }) {
         </Card>
 
         <Card>
-          <p className="text-base font-semibold mb-1" style={{ color: T.text }}>Anonymous Comments</p>
-          <p className="text-xs text-gray-500 mb-3">Sample threshold (n &ge; 3)</p>
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <p className="text-base font-semibold" style={{ color: T.text }}>Anonymous Comments</p>
+              <p className="text-[11px] text-gray-500 mt-0.5 flex items-center gap-1">
+                <ShieldCheck size={12} className="text-emerald-600" /> Identity detached &bull; n &ge; 3 protection
+              </p>
+            </div>
+            {insights?.anonymous_breakdown?.status === "available" && (
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-[#4E6ABF] border border-blue-100">
+                {insights.anonymous_breakdown.comments?.length || 0} notes
+              </span>
+            )}
+          </div>
           {insights?.anonymous_breakdown?.status === "available" ? (
             <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
               {(insights.anonymous_breakdown.comments || []).map((c, i) => (
@@ -1465,7 +1485,7 @@ function ManagerDashboard({ setMobileOpen, setView }) {
             <div className="p-4 rounded-xl bg-gray-50 border border-gray-100 text-center text-xs text-gray-500 space-y-1">
               <Lock size={16} className="mx-auto text-gray-400" />
               <p className="font-medium text-gray-700">Comments Locked</p>
-              <p className="text-[11px]">Requires at least 3 anonymous submissions.</p>
+              <p className="text-[11px]">Requires at least 3 anonymous submissions to protect privacy.</p>
             </div>
           )}
         </Card>
@@ -1798,14 +1818,49 @@ function ManagerInsights({ setMobileOpen }) {
       {/* Main Privacy & Anonymous Comments Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card>
-          <p className="text-base font-semibold mb-3" style={{ color: T.text }}>Privacy Model</p>
-          <div className="flex items-center gap-2 text-xs text-gray-600 mb-2">
-            <ShieldCheck size={16} className="text-[#4E6ABF]" />
-            <span>Threshold protection (n &ge; 3) enforced at the database level.</span>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-base font-semibold" style={{ color: T.text }}>Anonymous Privacy Guarantee</p>
+            <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+              <ShieldCheck size={12} className="text-emerald-600" />
+              100% Anonymized
+            </span>
           </div>
-          <p className="text-xs text-gray-500 leading-relaxed">
-            Raw anonymous check-in records have user_id set to NULL and can never be selected by any manager or admin.
+
+          <p className="text-xs text-gray-500 leading-relaxed mb-3.5">
+            PeoplePulse guarantees psychological safety through irreversible database-level privacy protections:
           </p>
+
+          <div className="space-y-2.5">
+            <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-gray-50 border border-gray-100">
+              <ShieldCheck size={15} className="text-[#4E6ABF] mt-0.5 shrink-0" />
+              <div>
+                <p className="text-xs font-semibold text-[#1F2A28]">Zero Identity Trace</p>
+                <p className="text-[11px] text-gray-500 leading-relaxed">
+                  When submitting anonymously, author accounts and identifying records are permanently detached before saving. Neither managers nor administrators can ever see who submitted a check-in.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-gray-50 border border-gray-100">
+              <Lock size={15} className="text-[#4E6ABF] mt-0.5 shrink-0" />
+              <div>
+                <p className="text-xs font-semibold text-[#1F2A28]">Anti-De-anonymization Threshold (n ≥ 3)</p>
+                <p className="text-[11px] text-gray-500 leading-relaxed">
+                  Written comments and segmented metrics remain strictly locked until at least 3 teammates submit pulses, eliminating process-of-elimination guesswork.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-gray-50 border border-gray-100">
+              <Sparkles size={15} className="text-[#4E6ABF] mt-0.5 shrink-0" />
+              <div>
+                <p className="text-xs font-semibold text-[#1F2A28]">Aggregated Team Signals</p>
+                <p className="text-[11px] text-gray-500 leading-relaxed">
+                  Leadership dashboards only present blended team averages to surface actionable trends without exposing individual responses.
+                </p>
+              </div>
+            </div>
+          </div>
         </Card>
 
         <Card>
@@ -2238,9 +2293,19 @@ function EmployeeCheckin({ setMobileOpen, onSubmitted }) {
       <Card className="mt-4">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-semibold" style={{ color: T.text }}>Submit anonymously</p>
-            <p className="text-xs mt-0.5 flex items-center gap-1" style={{ color: T.muted }}>
-              <Lock size={11} /> Your identity will never be attached to this submission.
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-semibold" style={{ color: T.text }}>Submit anonymously</p>
+              {anon && (
+                <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
+                  <ShieldCheck size={11} className="text-emerald-600" /> Identity Protected
+                </span>
+              )}
+            </div>
+            <p className="text-xs mt-0.5 flex items-center gap-1 text-gray-500">
+              <Lock size={11} className="text-gray-400 shrink-0" />
+              {anon
+                ? "Your name and account are completely detached before saving to the database."
+                : "Your manager will see your name attached to this check-in."}
             </p>
           </div>
           <button
