@@ -2835,8 +2835,8 @@ function EmployeeCheckin({ setMobileOpen, onSubmitted }) {
           console.warn("[Broadcast Diagnostic]", bErr);
         }
 
-        // 7. Asynchronously trigger Gemini AI sentiment analysis if free_text was entered
-        if (note.trim().length > 0 && insertedId) {
+        // 7. Asynchronously trigger Gemini AI sentiment analysis if meaningful free_text was entered (at least 3 characters)
+        if (note.trim().length >= 3 && insertedId) {
           (async () => {
             try {
               const { data: sessionData } = await supabase.auth.getSession();

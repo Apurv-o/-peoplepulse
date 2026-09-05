@@ -163,92 +163,116 @@ Deno.serve(async (req) => {
     }
 
 
-    // 6. Verify GEMINI_API_KEY presence
-    if (!geminiApiKey) {
-      console.warn("[analyze-sentiment] GEMINI_API_KEY secret is not set. Skipping AI processing gracefully.");
-      return new Response(
-        JSON.stringify({ status: "unavailable", message: "AI processing secret not configured" }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    // 6. Fast-path zero-token dictionary for common feedback phrases
+    const normalized = trimmedText.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+    const commonPhrases: Record<string, SentimentOutput> = {
+      "good": { sentiment_label: "positive", sentiment_score: 0.7, ai_summary: "Employee reports positive feedback." },
+      "all good": { sentiment_label: "positive", sentiment_score: 0.8, ai_summary: "All is going well." },
+      "great": { sentiment_label: "positive", sentiment_score: 0.9, ai_summary: "Employee reports a great day." },
+      "awesome": { sentiment_label: "positive", sentiment_score: 0.9, ai_summary: "Employee reports an awesome experience." },
+      "going well": { sentiment_label: "positive", sentiment_score: 0.8, ai_summary: "Work is progressing smoothly." },
+      "happy": { sentiment_label: "positive", sentiment_score: 0.85, ai_summary: "Employee expresses satisfaction." },
+      "smooth": { sentiment_label: "positive", sentiment_score: 0.75, ai_summary: "Work is running smoothly." },
+      "fine": { sentiment_label: "neutral", sentiment_score: 0.1, ai_summary: "Work is proceeding normally." },
+      "ok": { sentiment_label: "neutral", sentiment_score: 0.0, ai_summary: "Neutral status." },
+      "okay": { sentiment_label: "neutral", sentiment_score: 0.0, ai_summary: "Neutral status." },
+      "busy": { sentiment_label: "neutral", sentiment_score: -0.1, ai_summary: "Workload is currently heavy." },
+      "average": { sentiment_label: "neutral", sentiment_score: 0.0, ai_summary: "Average workday reported." },
+      "tired": { sentiment_label: "negative", sentiment_score: -0.6, ai_summary: "Employee reports fatigue." },
+      "exhausted": { sentiment_label: "negative", sentiment_score: -0.85, ai_summary: "Employee reports high exhaustion." },
+      "stressed": { sentiment_label: "negative", sentiment_score: -0.75, ai_summary: "Employee reports feeling stressed." },
+      "bad": { sentiment_label: "negative", sentiment_score: -0.8, ai_summary: "Employee reports a bad experience." },
+      "terrible": { sentiment_label: "negative", sentiment_score: -0.9, ai_summary: "Employee reports a difficult day." },
+      "overwhelmed": { sentiment_label: "negative", sentiment_score: -0.85, ai_summary: "Employee feels overwhelmed." },
+    };
 
-    // 7. Call Gemini API with official structured response_schema
-    let sentimentResult: SentimentOutput | null = null;
-    try {
-      const selectedModel = Deno.env.get("GEMINI_MODEL") || "gemini-2.5-flash";
-      const candidateModels = [selectedModel, "gemini-2.0-flash", "gemini-1.5-flash"].filter(
-        (m, idx, arr) => arr.indexOf(m) === idx
-      );
+    let sentimentResult: SentimentOutput | null = commonPhrases[normalized] || null;
 
-      const prompt = `You are a sentiment analysis engine for an employee pulse engagement tool.
-Analyze ONLY the employee feedback comment provided below.
-CRITICAL RULES:
-- Do NOT infer or mention employee name, identity, email, manager, or attrition risk.
-- Do NOT output any chain-of-thought, preamble, or reasoning text.
-- Follow strictly the requested JSON schema.
-
-Employee feedback:
-"""
-${trimmedText}
-"""`;
-
-      const requestBody = {
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          response_mime_type: "application/json",
-          response_schema: {
-            type: "OBJECT",
-            properties: {
-              sentiment_label: {
-                type: "STRING",
-                enum: ["positive", "neutral", "negative"],
-              },
-              sentiment_score: {
-                type: "NUMBER",
-                description: "Numeric sentiment score between -1.0 and 1.0",
-              },
-              ai_summary: {
-                type: "STRING",
-                description: "Short neutral factual summary in 1 sentence, max 150 characters",
-              },
-            },
-            required: ["sentiment_label", "sentiment_score", "ai_summary"],
-          },
-          temperature: 0.1,
-        },
-      };
-
-      let geminiResponse: Response | null = null;
-      let lastErrText = "";
-
-      for (const modelName of candidateModels) {
-        const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiApiKey}`;
-        const res = await fetch(geminiEndpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(requestBody),
-        });
-
-        if (res.ok) {
-          geminiResponse = res;
-          break;
-        } else {
-          lastErrText = await res.text().catch(() => "");
-          console.warn(`[Gemini API Warning] Model ${modelName} returned HTTP ${res.status}: ${lastErrText.slice(0, 200)}`);
-          // If 404 (model not available in region/tier), try next fallback model
-          if (res.status !== 404) {
-            break;
-          }
-        }
-      }
-
-      if (!geminiResponse || !geminiResponse.ok) {
-        console.error(`[Gemini API Error] Final failure: ${lastErrText.slice(0, 300)}`);
+    // 7. If not in fast dictionary, call Gemini with strict token-budget limits
+    if (!sentimentResult) {
+      if (!geminiApiKey) {
+        console.warn("[analyze-sentiment] GEMINI_API_KEY secret is not set. Skipping AI processing gracefully.");
         return new Response(
-          JSON.stringify({ status: "unavailable", message: "Gemini API request failed" }),
+          JSON.stringify({ status: "unavailable", message: "AI processing secret not configured" }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
+
+      try {
+        // Priority to lowest token cost and highest throughput models
+        const selectedModel = Deno.env.get("GEMINI_MODEL") || "gemini-2.0-flash-lite";
+        const candidateModels = [
+          selectedModel,
+          "gemini-2.0-flash-lite",
+          "gemini-1.5-flash",
+          "gemini-2.0-flash",
+          "gemini-2.5-flash",
+        ].filter((m, idx, arr) => arr.indexOf(m) === idx);
+
+        // Cap input text to max 250 chars to prevent accidental large token consumption
+        const compactText = trimmedText.slice(0, 250);
+        const prompt = `Classify sentiment for pulse feedback: "${compactText}". Output JSON only matching schema.`;
+
+        const requestBody = {
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            response_mime_type: "application/json",
+            maxOutputTokens: 80,
+            thinkingConfig: {
+              thinkingBudget: 0,
+            },
+            response_schema: {
+              type: "OBJECT",
+              properties: {
+                sentiment_label: {
+                  type: "STRING",
+                  enum: ["positive", "neutral", "negative"],
+                },
+                sentiment_score: {
+                  type: "NUMBER",
+                  description: "Numeric score between -1.0 and 1.0",
+                },
+                ai_summary: {
+                  type: "STRING",
+                  description: "Brief factual summary under 15 words",
+                },
+              },
+              required: ["sentiment_label", "sentiment_score", "ai_summary"],
+            },
+            temperature: 0.1,
+          },
+        };
+
+        let geminiResponse: Response | null = null;
+        let lastErrText = "";
+
+        for (const modelName of candidateModels) {
+          const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiApiKey}`;
+          const res = await fetch(geminiEndpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(requestBody),
+          });
+
+          if (res.ok) {
+            geminiResponse = res;
+            break;
+          } else {
+            lastErrText = await res.text().catch(() => "");
+            console.warn(`[Gemini API Warning] Model ${modelName} returned HTTP ${res.status}: ${lastErrText.slice(0, 200)}`);
+            if (res.status !== 404) {
+              break;
+            }
+          }
+        }
+
+        if (!geminiResponse || !geminiResponse.ok) {
+          console.error(`[Gemini API Error] Final failure: ${lastErrText.slice(0, 300)}`);
+          return new Response(
+            JSON.stringify({ status: "unavailable", message: "Gemini API request failed" }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
 
       const geminiData = await geminiResponse.json();
       const rawJsonString = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -282,10 +306,11 @@ ${trimmedText}
     } catch (aiErr) {
       console.error("[Gemini Parsing/Execution Error]", (aiErr as Error).message);
       // Graceful AI failure: does NOT fail the check-in
-      return new Response(
-        JSON.stringify({ status: "unavailable", message: "AI analysis parsing failed gracefully" }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+        return new Response(
+          JSON.stringify({ status: "unavailable", message: "AI analysis parsing failed gracefully" }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     // 8. Update sentiment_results via service_role client (only service_role has update permission)
