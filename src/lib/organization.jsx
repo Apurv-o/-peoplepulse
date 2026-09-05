@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
 import { supabase, isSupabaseConfigured } from "./supabase";
 import { useAuth } from "./auth";
 
@@ -13,23 +13,30 @@ export function OrganizationProvider({ children }) {
   const [activeRole, setActiveRole] = useState(null);
   const [loading, setLoading] = useState(true);
   const [lastFetchedUserId, setLastFetchedUserId] = useState(null);
+  const lastFetchedUserIdRef = useRef(null);
   const [usage, setUsage] = useState({ used: 0, limit: 10 });
   const [seatUsage, setSeatUsage] = useState({ used: 0, max: 10 });
   const [teamUsage, setTeamUsage] = useState({ used: 0, max: 1 });
 
   // Fetch all organizations the authenticated user belongs to
   const fetchOrganizations = useCallback(async () => {
-    if (!user || !supabase || !isSupabaseConfigured) {
+    const currentUserId = user?.id;
+    if (!currentUserId || !supabase || !isSupabaseConfigured) {
       setOrganizations([]);
       setActiveOrganization(null);
       setActiveRole(null);
       setLoading(false);
       setLastFetchedUserId(null);
+      lastFetchedUserIdRef.current = null;
       return [];
     }
 
     try {
-      setLoading(true);
+      // Only show full loading state if we have not loaded organizations for this user yet
+      if (lastFetchedUserIdRef.current !== currentUserId) {
+        setLoading(true);
+      }
+
       const { data: memberRows, error } = await supabase
         .from("organization_members")
         .select(`
@@ -47,12 +54,13 @@ export function OrganizationProvider({ children }) {
             created_at
           )
         `)
-        .eq("user_id", user.id)
+        .eq("user_id", currentUserId)
         .eq("is_active", true);
 
       if (error) {
         console.error("[Organization] Error fetching memberships:", error.message);
-        setLastFetchedUserId(user.id);
+        lastFetchedUserIdRef.current = currentUserId;
+        setLastFetchedUserId(currentUserId);
         setLoading(false);
         return [];
       }
@@ -71,8 +79,16 @@ export function OrganizationProvider({ children }) {
       const savedOrgId = typeof window !== "undefined" ? localStorage.getItem(STORAGE_ACTIVE_ORG_KEY) : null;
       let matchedOrg = orgs.find((o) => o.id === savedOrgId) || orgs[0] || null;
 
-      setActiveOrganization(matchedOrg);
-      setActiveRole(matchedOrg?.role || null);
+      setActiveOrganization((prev) => {
+        if (prev?.id === matchedOrg?.id && prev?.name === matchedOrg?.name && prev?.plan === matchedOrg?.plan) {
+          return prev;
+        }
+        return matchedOrg;
+      });
+      setActiveRole((prev) => {
+        if (prev === matchedOrg?.role) return prev;
+        return matchedOrg?.role || null;
+      });
 
       if (matchedOrg) {
         if (typeof window !== "undefined") {
@@ -81,16 +97,18 @@ export function OrganizationProvider({ children }) {
         await fetchUsageAndLimits(matchedOrg.id, matchedOrg);
       }
 
-      setLastFetchedUserId(user.id);
+      lastFetchedUserIdRef.current = currentUserId;
+      setLastFetchedUserId(currentUserId);
       setLoading(false);
       return orgs;
     } catch (err) {
       console.error("[Organization] Unexpected fetch error:", err);
-      setLastFetchedUserId(user.id);
+      lastFetchedUserIdRef.current = currentUserId;
+      setLastFetchedUserId(currentUserId);
       setLoading(false);
       return [];
     }
-  }, [user]);
+  }, [user?.id]);
 
   // Fetch quota, seat, and team counts for the active organization
   const fetchUsageAndLimits = async (orgId, orgObj) => {

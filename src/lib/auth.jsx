@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useRef } from "react";
 import { supabase, isSupabaseConfigured } from "./supabase";
 
 const AuthContext = createContext(null);
@@ -15,6 +15,11 @@ export function AuthProvider({ children }) {
     const search = (window.location.search || "").toLowerCase();
     return hash.includes("type=recovery") || search.includes("type=recovery") || hash.includes("reset-password");
   });
+
+  const profileRef = useRef(profile);
+  useEffect(() => {
+    profileRef.current = profile;
+  }, [profile]);
 
   // Fetch trusted profile directly from database to determine role securely
   const fetchProfile = async (userId) => {
@@ -65,14 +70,21 @@ export function AuthProvider({ children }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, currentSession) => {
         setSession(currentSession);
-        setUser(currentSession?.user || null);
+        setUser((prevUser) => {
+          if (prevUser?.id && currentSession?.user?.id && prevUser.id === currentSession.user.id) {
+            return prevUser;
+          }
+          return currentSession?.user || null;
+        });
 
         if (event === "PASSWORD_RECOVERY") {
           setIsPasswordRecovery(true);
         }
 
         if (currentSession?.user) {
-          await fetchProfile(currentSession.user.id);
+          if (!profileRef.current || profileRef.current.id !== currentSession.user.id) {
+            await fetchProfile(currentSession.user.id);
+          }
         } else {
           setProfile(null);
           setRole(null);

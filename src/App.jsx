@@ -224,8 +224,9 @@ function AppContent() {
     );
   }
 
-  // Loading screen when authenticating or loading organization for a logged-in user
-  if (user && (authLoading || orgLoading)) {
+  // Loading screen when authenticating or loading organization on initial cold start
+  const hasLoadedWorkspace = organizations.length > 0 || isDemoMode;
+  if (user && (authLoading || orgLoading) && !hasLoadedWorkspace) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#F7F7F5]">
         <div className="w-10 h-10 border-4 border-blue-100 border-t-[#4E6ABF] rounded-full animate-spin mb-4" />
