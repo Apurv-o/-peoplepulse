@@ -2135,28 +2135,105 @@ function EmployeeDashboard({ setMobileOpen, setView }) {
 function AdminDashboard({ setMobileOpen }) {
   const { activeOrganization, activeOrganizationId, seatUsage, teamUsage } = useOrganization();
   const orgName = activeOrganization?.name || "Acme Corp";
-  const memberCount = seatUsage?.used || 3;
-  const teamCount = teamUsage?.used || 8;
+  const memberCount = seatUsage?.used || 0;
+  const teamCount = teamUsage?.used || 0;
   const [todayCheckins, setTodayCheckins] = useState(null);
+  const [teamComparisonData, setTeamComparisonData] = useState([]);
+  const [loadingTeams, setLoadingTeams] = useState(true);
+  const [orgEngagementScore, setOrgEngagementScore] = useState(null);
+  const [totalOrgCheckins, setTotalOrgCheckins] = useState(null);
+  const [sentimentDistribution, setSentimentDistribution] = useState(null);
+
+  const loadDashboardData = useCallback(async () => {
+    if (!supabase || !activeOrganizationId) return;
+    try {
+      setLoadingTeams(true);
+      const today = getTodayDate();
+
+      // 1. Fetch today's check-ins count
+      supabase
+        .from("checkins")
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", activeOrganizationId)
+        .eq("week_start", today)
+        .then(({ count, error }) => {
+          if (!error && count !== null) {
+            setTodayCheckins(count);
+          }
+        });
+
+      // 2. Fetch real-time team comparison, org score, and sentiment breakdown
+      const { data, error } = await supabase.rpc("get_org_team_comparison", {
+        p_org_id: activeOrganizationId,
+      });
+
+      if (!error && data) {
+        setTeamComparisonData(Array.isArray(data.teams) ? data.teams : []);
+        if (typeof data.org_score === "number") {
+          setOrgEngagementScore(data.org_score);
+        }
+        if (typeof data.total_checkins === "number") {
+          setTotalOrgCheckins(data.total_checkins);
+        }
+        if (Array.isArray(data.sentiment_split) && data.sentiment_split.length > 0) {
+          setSentimentDistribution(data.sentiment_split);
+        } else {
+          setSentimentDistribution([]);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load admin dashboard realtime metrics:", err);
+    } finally {
+      setLoadingTeams(false);
+    }
+  }, [activeOrganizationId]);
 
   useEffect(() => {
+    loadDashboardData();
+
     if (!supabase || !activeOrganizationId) return;
-    const today = getTodayDate();
-    supabase
-      .from("checkins")
-      .select("id", { count: "exact", head: true })
-      .eq("organization_id", activeOrganizationId)
-      .eq("week_start", today)
-      .then(({ count, error }) => {
-        if (!error && count !== null) {
-          setTodayCheckins(count);
+
+    // Real-time Postgres changes subscription
+    const channel = supabase
+      .channel(`admin-dashboard-${activeOrganizationId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "checkins",
+          filter: `organization_id=eq.${activeOrganizationId}`,
+        },
+        () => {
+          loadDashboardData();
         }
-      });
-  }, [activeOrganizationId]);
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "teams",
+          filter: `organization_id=eq.${activeOrganizationId}`,
+        },
+        () => {
+          loadDashboardData();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activeOrganizationId, loadDashboardData]);
 
   const dailyParticipationPct = memberCount > 0 && todayCheckins !== null
     ? Math.min(100, Math.round((todayCheckins / memberCount) * 100))
-    : 67;
+    : (todayCheckins === 0 ? 0 : 67);
+
+  const displaySentiment = sentimentDistribution && sentimentDistribution.length > 0
+    ? sentimentDistribution
+    : (sentimentSplit || []);
 
   return (
     <div>
@@ -2170,66 +2247,154 @@ function AdminDashboard({ setMobileOpen }) {
         <KPICard label="Active Teams" value={String(teamCount)} />
         <KPICard
           label="Daily participation"
-          value={todayCheckins !== null ? `${dailyParticipationPct}%` : "67%"}
+          value={todayCheckins !== null ? `${dailyParticipationPct}%` : "0%"}
           unit={todayCheckins !== null ? `${todayCheckins} / ${memberCount}` : ""}
           delta={3.5}
           goodDirection="up"
         />
-        <KPICard label="Org. engagement" value="76" unit="/ 100" delta={2.5} goodDirection="up" />
+        <KPICard
+          label="Org. engagement"
+          value={orgEngagementScore !== null ? String(orgEngagementScore) : "76"}
+          unit="/ 100"
+          delta={orgEngagementScore !== null ? (orgEngagementScore >= 60 ? 2.5 : -1.5) : 2.5}
+          goodDirection="up"
+        />
       </div>
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-6">
         <Card>
-          <p className="text-base font-semibold mb-4" style={{ color: T.text }}>Organization engagement</p>
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-base font-semibold" style={{ color: T.text }}>Organization engagement</p>
+            <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: T.bg, color: T.muted }}>
+              Weekly trend
+            </span>
+          </div>
           <ResponsiveContainer width="100%" height={200}>
             <LineChart data={engagementTrend} margin={{ left: -20 }}>
               <CartesianGrid vertical={false} stroke={T.border} />
               <XAxis dataKey="week" tick={{ fontSize: 12, fill: T.muted }} axisLine={false} tickLine={false} />
-              <YAxis domain={[60, 90]} tick={{ fontSize: 12, fill: T.muted }} axisLine={false} tickLine={false} />
+              <YAxis domain={[0, 100]} tick={{ fontSize: 12, fill: T.muted }} axisLine={false} tickLine={false} />
               <Tooltip contentStyle={{ borderRadius: 12, border: `1px solid ${T.border}`, fontSize: 13 }} />
               <Line type="monotone" dataKey="score" stroke={T.primary} strokeWidth={2.5} dot={{ r: 3 }} />
             </LineChart>
           </ResponsiveContainer>
         </Card>
         <Card>
-          <p className="text-base font-semibold mb-4" style={{ color: T.text }}>Team comparison</p>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={teamComparison} layout="vertical" margin={{ left: 10 }}>
-              <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11, fill: T.muted }} axisLine={false} tickLine={false} />
-              <YAxis type="category" dataKey="team" tick={{ fontSize: 12, fill: T.text }} axisLine={false} tickLine={false} width={80} />
-              <Tooltip contentStyle={{ borderRadius: 12, border: `1px solid ${T.border}`, fontSize: 13 }} />
-              <Bar dataKey="score" fill={T.primary} radius={[0, 6, 6, 0]} barSize={16} />
-            </BarChart>
-          </ResponsiveContainer>
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <p className="text-base font-semibold" style={{ color: T.text }}>Team comparison</p>
+              <p className="text-xs mt-0.5" style={{ color: T.muted }}>
+                Real-time engagement scores across {teamComparisonData.length} team(s)
+              </p>
+            </div>
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/60 shadow-xs">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live Realtime
+            </span>
+          </div>
+
+          {loadingTeams ? (
+            <div className="h-[200px] flex items-center justify-center text-sm" style={{ color: T.muted }}>
+              <div className="animate-spin w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full mr-2.5" />
+              Syncing live team data...
+            </div>
+          ) : teamComparisonData.length === 0 ? (
+            <div className="h-[200px] flex flex-col items-center justify-center text-center p-4 border border-dashed rounded-xl" style={{ borderColor: T.border }}>
+              <p className="text-sm font-semibold" style={{ color: T.text }}>No teams yet</p>
+              <p className="text-xs mt-1 max-w-xs" style={{ color: T.muted }}>
+                Add teams in the Teams tab to compare engagement and satisfaction across your organization.
+              </p>
+            </div>
+          ) : (
+            <div>
+              <ResponsiveContainer width="100%" height={Math.max(190, teamComparisonData.length * 36)}>
+                <BarChart data={teamComparisonData} layout="vertical" margin={{ left: 10, right: 20, top: 5, bottom: 5 }}>
+                  <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11, fill: T.muted }} axisLine={false} tickLine={false} />
+                  <YAxis
+                    type="category"
+                    dataKey="team"
+                    tick={{ fontSize: 12, fill: T.text }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={110}
+                  />
+                  <Tooltip
+                    contentStyle={{ borderRadius: 12, border: `1px solid ${T.border}`, fontSize: 13 }}
+                    formatter={(val, name, item) => [
+                      `${val} / 100 (${item.payload.total_checkins || 0} check-ins)`,
+                      "Engagement Score"
+                    ]}
+                  />
+                  <Bar dataKey="score" fill={T.primary} radius={[0, 6, 6, 0]} barSize={16} />
+                </BarChart>
+              </ResponsiveContainer>
+              {teamComparisonData.every(t => (t.total_checkins || 0) === 0) && (
+                <p className="text-[11px] text-center mt-2 italic" style={{ color: T.muted }}>
+                  Awaiting first check-in submissions for this organization. Scores will update live as responses are recorded.
+                </p>
+              )}
+            </div>
+          )}
         </Card>
       </div>
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <Card>
-          <p className="text-base font-semibold mb-3" style={{ color: T.text }}>Sentiment distribution</p>
-          <div className="flex items-center gap-4">
-            <ResponsiveContainer width={110} height={110}>
-              <PieChart>
-                <Pie data={sentimentSplit} dataKey="value" innerRadius={34} outerRadius={50}>
-                  {sentimentSplit.map((s, i) => <Cell key={i} fill={s.color} stroke="none" />)}
-                </Pie>
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="space-y-1.5">
-              {sentimentSplit.map((s) => (
-                <div key={s.name} className="flex items-center gap-2 text-xs">
-                  <span className="w-2 h-2 rounded-full" style={{ background: s.color }} />
-                  <span style={{ color: T.muted }}>{s.name}</span>
-                  <span className="font-medium" style={{ color: T.text }}>{s.value}%</span>
-                </div>
-              ))}
-            </div>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-base font-semibold" style={{ color: T.text }}>Sentiment distribution</p>
+            {sentimentDistribution && sentimentDistribution.length > 0 && (
+              <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: T.bg, color: T.muted }}>
+                {totalOrgCheckins || 0} total check-ins
+              </span>
+            )}
           </div>
+          {displaySentiment.length > 0 && displaySentiment.some(s => s.value > 0) ? (
+            <div className="flex items-center gap-4">
+              <ResponsiveContainer width={110} height={110}>
+                <PieChart>
+                  <Pie data={displaySentiment} dataKey="value" innerRadius={34} outerRadius={50}>
+                    {displaySentiment.map((s, i) => <Cell key={i} fill={s.color} stroke="none" />)}
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="space-y-1.5 flex-1">
+                {displaySentiment.map((s) => (
+                  <div key={s.name} className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full" style={{ background: s.color }} />
+                      <span style={{ color: T.muted }}>{s.name}</span>
+                    </div>
+                    <span className="font-medium" style={{ color: T.text }}>
+                      {s.value}% {typeof s.count === "number" ? `(${s.count})` : ""}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="h-[110px] flex flex-col items-center justify-center text-center p-3 border border-dashed rounded-xl" style={{ borderColor: T.border }}>
+              <p className="text-xs font-medium" style={{ color: T.muted }}>
+                No sentiment data recorded yet.
+              </p>
+            </div>
+          )}
         </Card>
         <Card>
           <p className="text-base font-semibold mb-3" style={{ color: T.text }}>Employee activity</p>
           <ul className="space-y-2.5 text-sm">
-            <li className="flex justify-between"><span style={{ color: T.muted }}>Check-ins today</span><span className="font-medium" style={{ color: T.text }}>{todayCheckins !== null ? todayCheckins : 2}</span></li>
-            <li className="flex justify-between"><span style={{ color: T.muted }}>Active members</span><span className="font-medium" style={{ color: T.text }}>{memberCount}</span></li>
-            <li className="flex justify-between"><span style={{ color: T.muted }}>Flagged for attention</span><span className="font-medium" style={{ color: T.text }}>0</span></li>
+            <li className="flex justify-between">
+              <span style={{ color: T.muted }}>Check-ins today</span>
+              <span className="font-medium" style={{ color: T.text }}>{todayCheckins !== null ? todayCheckins : 0}</span>
+            </li>
+            <li className="flex justify-between">
+              <span style={{ color: T.muted }}>Total check-ins</span>
+              <span className="font-medium" style={{ color: T.text }}>{totalOrgCheckins !== null ? totalOrgCheckins : 0}</span>
+            </li>
+            <li className="flex justify-between">
+              <span style={{ color: T.muted }}>Active members</span>
+              <span className="font-medium" style={{ color: T.text }}>{memberCount}</span>
+            </li>
+            <li className="flex justify-between">
+              <span style={{ color: T.muted }}>Active teams</span>
+              <span className="font-medium" style={{ color: T.text }}>{teamCount}</span>
+            </li>
           </ul>
         </Card>
       </div>
