@@ -270,12 +270,11 @@ function Sidebar({ role, setRole, view, setView, mobileOpen, setMobileOpen, onRe
               className="flex items-center gap-2.5 hover:opacity-85 transition-opacity text-left group"
               title="Return to Public Homepage"
             >
-              <div
-                className="w-8 h-8 rounded-xl flex items-center justify-center shadow-sm transition-transform group-hover:scale-105"
-                style={{ background: T.primary }}
-              >
-                <span className="text-white text-xs font-bold">P</span>
-              </div>
+              <img
+                src="/logo.png"
+                alt="PeoplePulse Logo"
+                className="w-8 h-8 rounded-xl shadow-sm transition-transform group-hover:scale-105 object-cover"
+              />
               <span className="font-bold text-[16px] tracking-tight" style={{ color: T.text }}>PeoplePulse</span>
             </button>
             <button className="lg:hidden p-1 rounded-lg text-gray-400 hover:text-gray-700" onClick={() => setMobileOpen(false)}>
@@ -732,9 +731,7 @@ export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoT
       >
         <div className="flex items-center justify-between relative z-10">
           <div className="flex items-center gap-2 cursor-pointer" onClick={onReturnHome}>
-            <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center shadow-inner">
-              <span className="text-xs font-bold">P</span>
-            </div>
+            <img src="/logo.png" alt="PeoplePulse Logo" className="w-8 h-8 rounded-lg shadow-sm object-cover" />
             <span className="font-semibold text-lg tracking-tight">PeoplePulse</span>
           </div>
 
@@ -1182,9 +1179,7 @@ export function OnboardingModal({ onCompleted, onCancel }) {
     <div className="min-h-screen flex items-center justify-center p-4" style={{ background: T.bg }}>
       <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-8 border" style={{ borderColor: T.border }}>
         <div className="flex items-center gap-3 mb-6">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-lg" style={{ background: T.primary }}>
-            P
-          </div>
+          <img src="/logo.png" alt="PeoplePulse Logo" className="w-10 h-10 rounded-xl shadow-sm object-cover" />
           <div>
             <h2 className="text-xl font-bold" style={{ color: T.text }}>Create Your Organization</h2>
             <p className="text-xs" style={{ color: T.muted }}>Set up your workspace to begin</p>

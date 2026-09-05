@@ -281,9 +281,7 @@ function Navbar({ onSignIn, onGetStarted }) {
         }}
       >
         <div className="flex items-center gap-2.5 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-          <div className="w-7 h-7 rounded-lg flex items-center justify-center shadow-sm" style={{ background: T.primary }}>
-            <span className="text-white text-xs font-bold">P</span>
-          </div>
+          <img src="/logo.png" alt="PeoplePulse Logo" className="w-8 h-8 rounded-lg shadow-sm object-cover" />
           <span className="font-semibold text-[15px] tracking-tight" style={{ color: T.text }}>PeoplePulse</span>
         </div>
 
@@ -1006,9 +1004,7 @@ function Footer({ onSignIn }) {
       <div className="max-w-5xl mx-auto flex flex-col sm:flex-row justify-between gap-8">
         <div>
           <div className="flex items-center gap-2">
-            <div className="w-5 h-5 rounded-md flex items-center justify-center text-white text-[10px] font-bold" style={{ background: T.primary }}>
-              P
-            </div>
+            <img src="/logo.png" alt="PeoplePulse Logo" className="w-6 h-6 rounded-md shadow-sm object-cover" />
             <span className="font-semibold text-sm" style={{ color: T.text }}>PeoplePulse</span>
           </div>
           <p className="text-xs mt-2" style={{ color: T.muted }}>People first. Data second.</p>
