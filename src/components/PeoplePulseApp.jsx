@@ -1273,8 +1273,22 @@ export function AcceptInviteView({ token, onAccepted, onGoToLogin }) {
       org: sp.get("org") || "",
       role: sp.get("role") || "employee",
       team: sp.get("team") || "",
+      name: sp.get("name") || "",
+      temp: sp.get("temp") || "PeoplePulse123!",
     };
   }, [token]);
+
+  // Derive sensible default human name from email (e.g. hemraj.patel -> Hemraj Patel)
+  const deriveDefaultName = (email) => {
+    if (!email) return "";
+    const username = email.split("@")[0] || "";
+    return username
+      .replace(/[._-]/g, " ")
+      .split(" ")
+      .filter(Boolean)
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      .join(" ");
+  };
 
   const [inputToken, setInputToken] = useState(urlParams.token || token || "");
   const [invitedEmail, setInvitedEmail] = useState(urlParams.email || "");
@@ -1282,9 +1296,9 @@ export function AcceptInviteView({ token, onAccepted, onGoToLogin }) {
   const [role, setRole] = useState(urlParams.role || "employee");
   const [teamName, setTeamName] = useState(urlParams.team || "");
 
-  // Form states
-  const [fullName, setFullName] = useState("");
-  const [password, setPassword] = useState("");
+  // Form states: pre-filled with zero-friction defaults
+  const [fullName, setFullName] = useState(urlParams.name || deriveDefaultName(urlParams.email));
+  const [password, setPassword] = useState(urlParams.temp || "PeoplePulse123!");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoginMode, setIsLoginMode] = useState(false);
 
@@ -1312,7 +1326,10 @@ export function AcceptInviteView({ token, onAccepted, onGoToLogin }) {
           if (data.valid === false) {
             setError(data.error || "This invitation link is invalid or has expired.");
           } else {
-            if (data.email) setInvitedEmail(data.email);
+            if (data.email) {
+              setInvitedEmail(data.email);
+              setFullName((prev) => prev || deriveDefaultName(data.email));
+            }
             if (data.organization_name) setOrgName(data.organization_name);
             if (data.role) setRole(data.role);
             if (data.team_name) setTeamName(data.team_name);
@@ -1336,6 +1353,7 @@ export function AcceptInviteView({ token, onAccepted, onGoToLogin }) {
 
     const cleanToken = inputToken.trim();
     const cleanEmail = (invitedEmail || "").trim().toLowerCase();
+    const cleanName = fullName.trim() || deriveDefaultName(cleanEmail) || "Employee";
 
     if (!cleanToken) {
       setError("Invitation token is missing. Please check your invitation link.");
@@ -1354,48 +1372,45 @@ export function AcceptInviteView({ token, onAccepted, onGoToLogin }) {
     try {
       if (isLoginMode) {
         // Mode 1: Log in with existing account credentials
-        await signIn(cleanEmail, password);
-        const result = await acceptInvitation(cleanToken);
-        setSuccessOrgName(result?.organization_name || orgName || "the organization");
-        setSuccess(true);
-        setTimeout(() => onAccepted?.(), 1300);
-      } else {
-        // Mode 2: Create new employee account
-        if (!fullName.trim()) {
-          setError("Please enter your full name.");
-          setLoading(false);
-          return;
-        }
-
         try {
-          await signUp(cleanEmail, password, {
-            name: fullName.trim(),
-            role: role || "employee",
+          await signIn(cleanEmail, password);
+        } catch (authErr) {
+          // If sign-in failed, try provisioning in case password was set via invitation
+          const { error: pErr } = await supabase.rpc("provision_and_accept_invitation", {
+            p_token: cleanToken,
+            p_password: password,
+            p_full_name: cleanName,
           });
-        } catch (signupErr) {
-          const msg = signupErr.message || "";
-          if (
-            msg.toLowerCase().includes("already registered") ||
-            msg.toLowerCase().includes("already exists") ||
-            msg.toLowerCase().includes("user already exists")
-          ) {
-            setIsLoginMode(true);
-            setError("An account with this email already exists. Please enter your password to log in and accept this invitation.");
-            setLoading(false);
-            return;
-          }
-          throw signupErr;
+          if (pErr) throw authErr;
+          await signIn(cleanEmail, password);
         }
-
-        // Accept invitation and link to organization
         const result = await acceptInvitation(cleanToken);
         setSuccessOrgName(result?.organization_name || orgName || "the organization");
         setSuccess(true);
-        setTimeout(() => onAccepted?.(), 1300);
+        setTimeout(() => onAccepted?.(), 1200);
+      } else {
+        // Mode 2: Zero-friction Instant Provisioning & Acceptance (Zero Supabase email rate limits!)
+        const { data: provisionData, error: provisionErr } = await supabase.rpc("provision_and_accept_invitation", {
+          p_token: cleanToken,
+          p_password: password,
+          p_full_name: cleanName,
+        });
+
+        if (provisionErr) {
+          throw provisionErr;
+        }
+
+        // Direct sign-in immediately with newly verified credentials
+        await signIn(cleanEmail, password);
+
+        // Mark success and transition to employee dashboard
+        setSuccessOrgName(provisionData?.organization_name || orgName || "the organization");
+        setSuccess(true);
+        setTimeout(() => onAccepted?.(), 1200);
       }
     } catch (err) {
       console.error("[Accept Invite Error]", err);
-      setError(err.message || "Failed to complete setup. Please check your invitation token.");
+      setError(err.message || "Failed to complete setup. Please check your invitation link.");
     } finally {
       setLoading(false);
     }
@@ -1573,9 +1588,16 @@ export function AcceptInviteView({ token, onAccepted, onGoToLogin }) {
 
             {/* Password */}
             <div>
-              <label className="text-xs font-semibold block mb-1 text-gray-700">
-                {isLoginMode ? "Account Password" : "Create Password"}
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs font-semibold text-gray-700">
+                  {isLoginMode ? "Account Password" : "Create or Set Password"}
+                </label>
+                {!isLoginMode && (
+                  <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                    Pre-filled default
+                  </span>
+                )}
+              </div>
               <div className="relative">
                 <input
                   type={showPassword ? "text" : "password"}
@@ -1596,6 +1618,11 @@ export function AcceptInviteView({ token, onAccepted, onGoToLogin }) {
                   {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>
               </div>
+              {!isLoginMode && (
+                <p className="text-[11px] text-gray-400 mt-1">
+                  Default password pre-filled for 1-click join. You can keep it or change it now.
+                </p>
+              )}
             </div>
 
             {/* Primary Action Button */}
@@ -1610,7 +1637,7 @@ export function AcceptInviteView({ token, onAccepted, onGoToLogin }) {
               ) : isLoginMode ? (
                 <span>Log In &amp; Join {orgName || "Team"} &rarr;</span>
               ) : (
-                <span>Create Employee Account &amp; Join {orgName || "Team"} &rarr;</span>
+                <span>Join {orgName || "Team"} &amp; Open Dashboard &rarr;</span>
               )}
             </button>
 
@@ -3654,6 +3681,7 @@ function buildInviteLink({ token, email, orgName, role, teamName }) {
   if (orgName) params.set("org", orgName);
   if (role) params.set("role", role);
   if (teamName) params.set("team", teamName);
+  params.set("temp", "PeoplePulse123!");
   return `${window.location.origin}/#invite?${params.toString()}`;
 }
 
@@ -3662,7 +3690,7 @@ function buildInviteEmailDetails({ email, link, role, orgName }) {
   const roleTitle = (role || "employee").charAt(0).toUpperCase() + (role || "employee").slice(1);
   const organizationName = orgName || "our organization";
   const subject = `You're invited to join ${organizationName} on PeoplePulse`;
-  const body = `Hi there,\n\nYou have been invited to join ${organizationName} on PeoplePulse as a ${roleTitle}.\n\nClick the link below to accept your invitation and set up your account:\n${link}\n\nNote: This single-use invitation link is secure and valid for 7 days.\n\nBest regards,\n${organizationName} Team\nPeoplePulse`;
+  const body = `Hi there,\n\nYou have been invited to join ${organizationName} on PeoplePulse as a ${roleTitle}.\n\nClick the link below to accept your invitation and access your employee dashboard in one click:\n${link}\n\nYour account has a default password (PeoplePulse123!) pre-filled so you can join instantly without delays, and you can change it at any time.\n\nBest regards,\n${organizationName} Team\nPeoplePulse`;
   return { subject, body, roleTitle, organizationName };
 }
 

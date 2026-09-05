@@ -1,4 +1,4 @@
-﻿-- =============================================================================
+-- =============================================================================
 -- PeoplePulse — Database Schema Migration 024
 -- Realtime Daily Participation Tracking and Pulse Sync Triggers
 -- =============================================================================
@@ -145,7 +145,3 @@ $$;
 revoke all on function public.get_org_today_participation(uuid, text) from public, anon;
 grant execute on function public.get_org_today_participation(uuid, text) to authenticated;
 
--- Record migration in schema_migrations
-insert into supabase_migrations.schema_migrations (version, name)
-values ('024', 'realtime_daily_participation')
-on conflict (version) do nothing;

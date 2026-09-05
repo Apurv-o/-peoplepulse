@@ -1,4 +1,4 @@
-﻿-- =============================================================================
+-- =============================================================================
 -- PeoplePulse — Database Schema Migration 025
 -- Secure RPC to Remove Organization Member
 -- =============================================================================
@@ -78,7 +78,3 @@ $$;
 revoke all on function public.remove_org_member(uuid, uuid) from public, anon;
 grant execute on function public.remove_org_member(uuid, uuid) to authenticated;
 
--- Record migration in schema_migrations
-insert into supabase_migrations.schema_migrations (version, name)
-values ('025', 'remove_organization_member')
-on conflict (version) do nothing;
