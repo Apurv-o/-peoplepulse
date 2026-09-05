@@ -670,7 +670,7 @@ export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoT
     setResetSuccess(false);
 
     if (!isConfigured) {
-      setAuthError("Supabase credentials not configured in .env yet. Use Demo Simulation Mode below to test the application.");
+      setAuthError("Supabase credentials not configured in .env yet. Please check your Supabase environment settings.");
       return;
     }
 
@@ -897,44 +897,6 @@ export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoT
               {loading ? "Processing..." : mode === "signup" ? "Continue to Organization Setup →" : "Sign in to Dashboard →"}
             </button>
           </form>
-
-          {/* Quick Demo Access Handler */}
-          <div className="mt-8 pt-6 border-t" style={{ borderColor: T.border }}>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
-                Demo Simulation Mode
-              </span>
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">
-                Preview Only
-              </span>
-            </div>
-            <p className="text-[11px] leading-relaxed mb-3" style={{ color: T.muted }}>
-              Explore role views without database writes. Real sign-in verifies roles and permissions via Supabase Auth and database RLS.
-            </p>
-            <div className="grid grid-cols-3 gap-1.5">
-              <button
-                type="button"
-                onClick={() => handleDemoLogin("manager", "sarah.patel@company.com")}
-                className="py-1.5 px-2 rounded-lg text-xs font-semibold bg-white border hover:border-[#4E6ABF] transition-all text-[#1F2A28] shadow-sm"
-              >
-                👔 Manager
-              </button>
-              <button
-                type="button"
-                onClick={() => handleDemoLogin("employee", "alex.morgan@company.com")}
-                className="py-1.5 px-2 rounded-lg text-xs font-semibold bg-white border hover:border-[#4E6ABF] transition-all text-[#1F2A28] shadow-sm"
-              >
-                👤 Employee
-              </button>
-              <button
-                type="button"
-                onClick={() => handleDemoLogin("admin", "admin@company.com")}
-                className="py-1.5 px-2 rounded-lg text-xs font-semibold bg-white border hover:border-[#4E6ABF] transition-all text-[#1F2A28] shadow-sm"
-              >
-                ⚡ Admin
-              </button>
-            </div>
-          </div>
 
           <p className="text-xs text-center mt-6" style={{ color: T.muted }}>
             Protected by multi-tenant RLS &amp; anonymization protocols.
