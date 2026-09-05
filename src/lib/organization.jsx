@@ -162,6 +162,50 @@ export function OrganizationProvider({ children }) {
     fetchOrganizations();
   }, [fetchOrganizations]);
 
+  // Real-time listener for active organization's teams and members
+  useEffect(() => {
+    if (!supabase || !activeOrganization?.id) return;
+    const orgId = activeOrganization.id;
+
+    const channel = supabase
+      .channel(`org-limits-realtime-${orgId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "teams",
+          filter: `organization_id=eq.${orgId}`,
+        },
+        () => {
+          fetchUsageAndLimits(orgId, activeOrganization);
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "organization_members",
+          filter: `organization_id=eq.${orgId}`,
+        },
+        () => {
+          fetchUsageAndLimits(orgId, activeOrganization);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activeOrganization?.id]);
+
+  const refreshUsageAndLimits = useCallback(async () => {
+    if (activeOrganization?.id) {
+      await fetchUsageAndLimits(activeOrganization.id, activeOrganization);
+    }
+  }, [activeOrganization]);
+
   // Switch to another authorized organization
   const switchOrganization = async (orgId) => {
     const target = organizations.find((o) => o.id === orgId);
@@ -251,6 +295,7 @@ export function OrganizationProvider({ children }) {
         loading: effectiveLoading,
         switchOrganization,
         refreshOrganization: fetchOrganizations,
+        refreshUsageAndLimits,
         createOrganization,
         sendInvitation,
         resendInvitation,

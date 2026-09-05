@@ -3000,8 +3000,10 @@ function EmployeeDashboard({ setMobileOpen, setView }) {
 function AdminDashboard({ setMobileOpen }) {
   const { activeOrganization, activeOrganizationId, seatUsage, teamUsage } = useOrganization();
   const orgName = activeOrganization?.name || "Acme Corp";
-  const memberCount = seatUsage?.used || 0;
-  const teamCount = teamUsage?.used || 0;
+  const [liveTeamCount, setLiveTeamCount] = useState(null);
+  const [liveMemberCount, setLiveMemberCount] = useState(null);
+  const memberCount = liveMemberCount !== null ? liveMemberCount : (seatUsage?.used || 0);
+  const teamCount = liveTeamCount !== null ? liveTeamCount : (teamUsage?.used || 0);
   const [todayCheckins, setTodayCheckins] = useState(null);
   const [teamComparisonData, setTeamComparisonData] = useState([]);
   const [loadingTeams, setLoadingTeams] = useState(true);
@@ -3014,6 +3016,22 @@ function AdminDashboard({ setMobileOpen }) {
     try {
       setLoadingTeams(true);
       const today = getTodayDate();
+
+      // 0. Fetch live team count and active member count directly
+      const [{ count: tCount }, { count: mCount }] = await Promise.all([
+        supabase
+          .from("teams")
+          .select("id", { count: "exact", head: true })
+          .eq("organization_id", activeOrganizationId),
+        supabase
+          .from("organization_members")
+          .select("id", { count: "exact", head: true })
+          .eq("organization_id", activeOrganizationId)
+          .eq("is_active", true),
+      ]);
+
+      if (tCount !== null && tCount !== undefined) setLiveTeamCount(tCount);
+      if (mCount !== null && mCount !== undefined) setLiveMemberCount(mCount);
 
       // 1. Fetch today's check-ins count
       supabase
@@ -3085,6 +3103,18 @@ function AdminDashboard({ setMobileOpen }) {
           loadDashboardData();
         }
       )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "organization_members",
+          filter: `organization_id=eq.${activeOrganizationId}`,
+        },
+        () => {
+          loadDashboardData();
+        }
+      )
       .subscribe();
 
     return () => {
@@ -3106,10 +3136,16 @@ function AdminDashboard({ setMobileOpen }) {
         title="Organization Overview"
         subtitle={`${teamCount} active team(s) across ${orgName}, daily cycle.`}
         setMobileOpen={setMobileOpen}
+        right={
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/60 text-xs font-medium">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span>Live Realtime</span>
+          </div>
+        }
       />
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <KPICard label="Organization Members" value={String(memberCount)} unit={`/ ${seatUsage?.max || 100}`} />
-        <KPICard label="Active Teams" value={String(teamCount)} />
+        <KPICard label="Active Teams" value={String(teamCount)} unit={teamUsage?.max ? `/ ${teamUsage.max}` : ""} />
         <KPICard
           label="Daily participation"
           value={todayCheckins !== null ? `${dailyParticipationPct}%` : "0%"}
@@ -4144,7 +4180,7 @@ function AdminEmployees({ setMobileOpen }) {
 }
 
 function AdminTeams({ setMobileOpen }) {
-  const { activeOrganizationId, teamUsage } = useOrganization();
+  const { activeOrganizationId, teamUsage, refreshUsageAndLimits } = useOrganization();
   const [teams, setTeams] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -4167,7 +4203,31 @@ function AdminTeams({ setMobileOpen }) {
 
   useEffect(() => {
     loadTeams();
-  }, [loadTeams]);
+
+    if (!supabase || !activeOrganizationId) return;
+
+    // Real-time Postgres changes subscription on teams
+    const channel = supabase
+      .channel(`admin-teams-live-${activeOrganizationId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "teams",
+          filter: `organization_id=eq.${activeOrganizationId}`,
+        },
+        () => {
+          loadTeams();
+          refreshUsageAndLimits?.();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activeOrganizationId, loadTeams, refreshUsageAndLimits]);
 
   const handleCreateTeam = async (e) => {
     e.preventDefault();
@@ -4184,10 +4244,27 @@ function AdminTeams({ setMobileOpen }) {
       setNewTeamName("");
       setShowCreateModal(false);
       await loadTeams();
+      refreshUsageAndLimits?.();
     } catch (err) {
       setCreateError(err.message || "Failed to create team.");
     } finally {
       setCreateLoading(false);
+    }
+  };
+
+  const handleDeleteTeam = async (teamId, teamName) => {
+    if (!window.confirm(`Are you sure you want to delete "${teamName}"? This action cannot be undone.`)) return;
+    try {
+      const { error } = await supabase
+        .from("teams")
+        .delete()
+        .eq("id", teamId)
+        .eq("organization_id", activeOrganizationId);
+      if (error) throw error;
+      await loadTeams();
+      refreshUsageAndLimits?.();
+    } catch (err) {
+      alert("Failed to delete team: " + (err.message || "Unknown error"));
     }
   };
 
@@ -4314,9 +4391,19 @@ function AdminTeams({ setMobileOpen }) {
           <Card key={t.id}>
             <div className="flex items-center justify-between mb-2">
               <p className="text-base font-semibold" style={{ color: T.text }}>{t.name}</p>
-              <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
-                Team
-              </span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                  Team
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteTeam(t.id, t.name)}
+                  className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                  title="Delete team"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
             </div>
             <p className="text-xs text-gray-500">
               Manager: {t.profiles?.name || "Unassigned"}
