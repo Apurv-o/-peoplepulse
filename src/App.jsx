@@ -40,6 +40,8 @@ function AppContent() {
   isDemoModeRef.current = isDemoMode;
   const currentScreenRef = useRef(currentScreen);
   currentScreenRef.current = currentScreen;
+  const organizationsRef = useRef(organizations);
+  organizationsRef.current = organizations;
 
   // Helper to sync location.hash with target screen
   const syncHashToScreen = (screen, extraParams = "") => {
@@ -79,6 +81,13 @@ function AppContent() {
         return;
       }
 
+      // If user has organizations, ensure they are NOT stuck in onboarding
+      if (organizations.length > 0 && currentScreen === "onboarding") {
+        setCurrentScreen("app");
+        syncHashToScreen("app");
+        return;
+      }
+
       // If user has 0 organizations, prompt onboarding
       if (organizations.length === 0 && !isDemoModeRef.current) {
         setCurrentScreen("onboarding");
@@ -107,7 +116,12 @@ function AppContent() {
         }
         setCurrentScreen("invite");
       } else if (hash === "#onboarding") {
-        setCurrentScreen("onboarding");
+        if (organizationsRef.current && organizationsRef.current.length > 0) {
+          setCurrentScreen("app");
+          syncHashToScreen("app");
+        } else {
+          setCurrentScreen("onboarding");
+        }
       } else if (hash === "#signup") {
         if (userRef.current && !isDemoModeRef.current) {
           setCurrentScreen("app");
@@ -158,6 +172,16 @@ function AppContent() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  // Loading screen when authenticating or loading organization for a logged-in user
+  if (user && (authLoading || orgLoading)) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#F7F7F5]">
+        <div className="w-10 h-10 border-4 border-blue-100 border-t-[#4E6ABF] rounded-full animate-spin mb-4" />
+        <p className="text-xs font-semibold text-[#1F2A28] tracking-wide">Loading workspace...</p>
+      </div>
+    );
+  }
+
   // 1. Accept Invitation View
   if (currentScreen === "invite") {
     return (
@@ -171,6 +195,17 @@ function AppContent() {
 
   // 2. Organization Onboarding View
   if (currentScreen === "onboarding") {
+    if (organizations.length > 0) {
+      const effectiveRole = isDemoMode ? demoRole : (activeRole || serverRole || "employee");
+      return (
+        <PeoplePulseApp
+          role={effectiveRole}
+          isDemoMode={isDemoMode}
+          onReturnHome={() => navigateTo("homepage")}
+          onSignOut={handleSignOut}
+        />
+      );
+    }
     return (
       <OnboardingModal
         onCompleted={() => {

@@ -12,6 +12,7 @@ export function OrganizationProvider({ children }) {
   const [activeOrganization, setActiveOrganization] = useState(null);
   const [activeRole, setActiveRole] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [lastFetchedUserId, setLastFetchedUserId] = useState(null);
   const [usage, setUsage] = useState({ used: 0, limit: 10 });
   const [seatUsage, setSeatUsage] = useState({ used: 0, max: 10 });
   const [teamUsage, setTeamUsage] = useState({ used: 0, max: 1 });
@@ -23,6 +24,7 @@ export function OrganizationProvider({ children }) {
       setActiveOrganization(null);
       setActiveRole(null);
       setLoading(false);
+      setLastFetchedUserId(null);
       return [];
     }
 
@@ -50,6 +52,7 @@ export function OrganizationProvider({ children }) {
 
       if (error) {
         console.error("[Organization] Error fetching memberships:", error.message);
+        setLastFetchedUserId(user.id);
         setLoading(false);
         return [];
       }
@@ -78,10 +81,12 @@ export function OrganizationProvider({ children }) {
         await fetchUsageAndLimits(matchedOrg.id, matchedOrg);
       }
 
+      setLastFetchedUserId(user.id);
       setLoading(false);
       return orgs;
     } catch (err) {
       console.error("[Organization] Unexpected fetch error:", err);
+      setLastFetchedUserId(user.id);
       setLoading(false);
       return [];
     }
@@ -211,6 +216,8 @@ export function OrganizationProvider({ children }) {
     return data;
   };
 
+  const effectiveLoading = loading || (Boolean(user) && lastFetchedUserId !== user.id);
+
   return (
     <OrganizationContext.Provider
       value={{
@@ -223,7 +230,7 @@ export function OrganizationProvider({ children }) {
         seatUsage,
         teamUsage,
         usage,
-        loading,
+        loading: effectiveLoading,
         switchOrganization,
         refreshOrganization: fetchOrganizations,
         createOrganization,
