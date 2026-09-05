@@ -1,16 +1,33 @@
 import React, { useState, useEffect, useRef } from "react";
 import PeoplePulseHomepage from "./components/PeoplePulseHomepage";
-import PeoplePulseApp, { LoginView, OnboardingModal, AcceptInviteView } from "./components/PeoplePulseApp";
+import PeoplePulseApp, { LoginView, OnboardingModal, AcceptInviteView, ResetPasswordView } from "./components/PeoplePulseApp";
 import { AuthProvider, useAuth } from "./lib/auth";
 import { OrganizationProvider, useOrganization } from "./lib/organization";
 
+// Helper to determine if current URL is a Supabase password recovery link
+function isRecoveryUrl() {
+  if (typeof window === "undefined") return false;
+  const hash = (window.location.hash || "").toLowerCase();
+  const search = (window.location.search || "").toLowerCase();
+  return (
+    hash.includes("type=recovery") ||
+    hash.startsWith("#reset-password") ||
+    hash.includes("reset-password") ||
+    hash.includes("reset_password") ||
+    search.includes("type=recovery") ||
+    search.includes("reset_password") ||
+    search.includes("reset-password")
+  );
+}
+
 function AppContent() {
-  const { user, profile, role: serverRole, signOut, loading: authLoading } = useAuth();
+  const { user, profile, role: serverRole, signOut, loading: authLoading, isPasswordRecovery } = useAuth();
   const { organizations, activeOrganization, activeRole, loading: orgLoading, refreshOrganization } = useOrganization();
 
-  // Navigation states: 'homepage' | 'login' | 'signup' | 'onboarding' | 'invite' | 'app'
+  // Navigation states: 'homepage' | 'login' | 'signup' | 'onboarding' | 'invite' | 'reset-password' | 'app'
   const [currentScreen, setCurrentScreen] = useState(() => {
     if (typeof window === "undefined") return "homepage";
+    if (isRecoveryUrl()) return "reset-password";
     const hash = window.location.hash.toLowerCase();
     if (hash.startsWith("#invite")) return "invite";
     if (hash === "#onboarding") return "onboarding";
@@ -43,11 +60,21 @@ function AppContent() {
   const organizationsRef = useRef(organizations);
   organizationsRef.current = organizations;
 
+  // React to auth password recovery trigger
+  useEffect(() => {
+    if (isPasswordRecovery || isRecoveryUrl()) {
+      setCurrentScreen("reset-password");
+      syncHashToScreen("reset-password");
+    }
+  }, [isPasswordRecovery]);
+
   // Helper to sync location.hash with target screen
   const syncHashToScreen = (screen, extraParams = "") => {
     if (typeof window === "undefined") return;
     const currentHash = window.location.hash.toLowerCase();
-    if (screen === "app" && currentHash !== "#app") {
+    if (screen === "reset-password" && !currentHash.includes("reset-password") && !currentHash.includes("type=recovery")) {
+      window.location.hash = "#reset-password";
+    } else if (screen === "app" && currentHash !== "#app") {
       window.location.hash = "#app";
     } else if (screen === "login" && currentHash !== "#login") {
       window.location.hash = "#login";
@@ -64,6 +91,11 @@ function AppContent() {
 
   // If user is authenticated: redirect from login/signup/homepage to app or onboarding
   useEffect(() => {
+    // If the user is currently in password recovery from an email link, DO NOT redirect away!
+    if (currentScreen === "reset-password" || isRecoveryUrl() || isPasswordRecovery) {
+      return;
+    }
+
     if (user && !authLoading && !orgLoading) {
       const hash = window.location.hash.toLowerCase();
       if (hash.startsWith("#invite")) {
@@ -101,11 +133,15 @@ function AppContent() {
         syncHashToScreen("app");
       }
     }
-  }, [user, authLoading, orgLoading, organizations.length, currentScreen]);
+  }, [user, authLoading, orgLoading, organizations.length, currentScreen, isPasswordRecovery]);
 
   // Handle URL hash changes (back/forward navigation or direct links)
   useEffect(() => {
     const handleHash = () => {
+      if (isRecoveryUrl()) {
+        setCurrentScreen("reset-password");
+        return;
+      }
       const hash = window.location.hash.toLowerCase();
       if (hash.startsWith("#invite")) {
         const rawHash = window.location.hash;
@@ -171,6 +207,22 @@ function AppContent() {
     syncHashToScreen("login");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
+
+  // 0. Password Recovery View (from Email Reset Link)
+  if (currentScreen === "reset-password" || isRecoveryUrl() || isPasswordRecovery) {
+    return (
+      <ResetPasswordView
+        onPasswordResetSuccess={() => {
+          if (organizations && organizations.length > 0) {
+            navigateTo("app");
+          } else {
+            navigateTo("login");
+          }
+        }}
+        onCancel={() => navigateTo("login")}
+      />
+    );
+  }
 
   // Loading screen when authenticating or loading organization for a logged-in user
   if (user && (authLoading || orgLoading)) {

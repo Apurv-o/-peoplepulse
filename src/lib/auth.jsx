@@ -9,6 +9,12 @@ export function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null);
   const [role, setRole] = useState(null);
   const [loading, setLoading] = useState(isSupabaseConfigured);
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const hash = (window.location.hash || "").toLowerCase();
+    const search = (window.location.search || "").toLowerCase();
+    return hash.includes("type=recovery") || search.includes("type=recovery") || hash.includes("reset-password");
+  });
 
   // Fetch trusted profile directly from database to determine role securely
   const fetchProfile = async (userId) => {
@@ -60,6 +66,10 @@ export function AuthProvider({ children }) {
       async (event, currentSession) => {
         setSession(currentSession);
         setUser(currentSession?.user || null);
+
+        if (event === "PASSWORD_RECOVERY") {
+          setIsPasswordRecovery(true);
+        }
 
         if (currentSession?.user) {
           await fetchProfile(currentSession.user.id);
@@ -121,7 +131,14 @@ export function AuthProvider({ children }) {
     if (!isSupabaseConfigured || !supabase) {
       throw new Error("Supabase is not configured yet with valid credentials.");
     }
-    const { data, error } = await supabase.auth.resetPasswordForEmail(email);
+    const cleanEmail = email.trim().toLowerCase();
+    const redirectUrl = typeof window !== "undefined"
+      ? `${window.location.origin}/#reset-password`
+      : undefined;
+
+    const { data, error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+      redirectTo: redirectUrl,
+    });
     if (error) throw error;
     return data;
   };
@@ -135,7 +152,30 @@ export function AuthProvider({ children }) {
       p_email: cleanEmail,
     });
     if (error) throw error;
-    supabase.auth.resetPasswordForEmail(cleanEmail).catch(() => {});
+
+    const redirectUrl = typeof window !== "undefined"
+      ? `${window.location.origin}/#reset-password`
+      : undefined;
+
+    supabase.auth.resetPasswordForEmail(cleanEmail, {
+      redirectTo: redirectUrl,
+    }).catch(() => {});
+
+    return data;
+  };
+
+  const updateUserPassword = async (newPassword) => {
+    if (!isSupabaseConfigured || !supabase) {
+      throw new Error("Supabase is not configured yet with valid credentials.");
+    }
+    if (!newPassword || newPassword.length < 6) {
+      throw new Error("Password must be at least 6 characters long.");
+    }
+    const { data, error } = await supabase.auth.updateUser({
+      password: newPassword,
+    });
+    if (error) throw error;
+    setIsPasswordRecovery(false);
     return data;
   };
 
@@ -162,11 +202,14 @@ export function AuthProvider({ children }) {
         role,
         loading,
         isConfigured: isSupabaseConfigured,
+        isPasswordRecovery,
+        setIsPasswordRecovery,
         signUp,
         signIn,
         signOut,
         resetPassword,
         requestPasswordReset,
+        updateUserPassword,
         verifyAndUpdatePassword,
         refreshProfile: () => user && fetchProfile(user.id),
       }}
