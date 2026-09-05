@@ -1108,7 +1108,7 @@ function ManagerDashboard({ setMobileOpen, setView }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // 1. Fetch available teams
+  // 1. Fetch available teams & prioritize user's managed team
   useEffect(() => {
     if (!supabase || !activeOrganizationId) return;
     let isMounted = true;
@@ -1121,9 +1121,16 @@ function ManagerDashboard({ setMobileOpen, setView }) {
         if (tErr) {
           setError(tErr.message);
         } else if (data && data.length > 0) {
-          setTeams(data);
-          const myTeam = data.find((t) => t.manager_id === user?.id) || data[0];
-          setSelectedTeamId(myTeam.id);
+          const sorted = [...data].sort((a, b) => {
+            if (a.manager_id === user?.id) return -1;
+            if (b.manager_id === user?.id) return 1;
+            return a.name.localeCompare(b.name);
+          });
+          setTeams(sorted);
+          if (!selectedTeamId || !data.some((t) => t.id === selectedTeamId)) {
+            const myTeam = sorted.find((t) => t.manager_id === user?.id) || sorted[0];
+            setSelectedTeamId(myTeam.id);
+          }
         } else {
           setTeams([]);
         }
@@ -1131,31 +1138,53 @@ function ManagerDashboard({ setMobileOpen, setView }) {
     return () => { isMounted = false; };
   }, [activeOrganizationId, user?.id]);
 
-  // 2. Fetch insights for selected team
-  useEffect(() => {
+  // 2. Fetch insights for selected team with live real-time sync
+  const fetchInsights = useCallback(async () => {
     if (!supabase || !selectedTeamId) return;
-    let isMounted = true;
     setLoading(true);
     setError(null);
 
-    supabase
-      .rpc("get_team_aggregated_insights", {
-        p_team_id: selectedTeamId,
-        p_week_start: selectedDate,
-      })
-      .then(({ data, error: rpcErr }) => {
-        if (!isMounted) return;
-        if (rpcErr) {
-          setError(rpcErr.message);
-          setInsights(null);
-        } else {
-          setInsights(data);
-        }
-        setLoading(false);
-      });
+    const { data, error: rpcErr } = await supabase.rpc("get_team_aggregated_insights", {
+      p_team_id: selectedTeamId,
+      p_week_start: selectedDate,
+    });
 
-    return () => { isMounted = false; };
+    if (rpcErr) {
+      setError(rpcErr.message);
+      setInsights(null);
+    } else {
+      setError(null);
+      setInsights(data);
+    }
+    setLoading(false);
   }, [selectedTeamId, selectedDate]);
+
+  useEffect(() => {
+    fetchInsights();
+
+    if (!supabase || !selectedTeamId || !activeOrganizationId) return;
+
+    // Real-time Postgres changes subscription on checkins
+    const channel = supabase
+      .channel(`manager-team-insights-${selectedTeamId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "checkins",
+          filter: `team_id=eq.${selectedTeamId}`,
+        },
+        () => {
+          fetchInsights();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [selectedTeamId, selectedDate, activeOrganizationId, fetchInsights]);
 
   const currentTeam = teams.find((t) => t.id === selectedTeamId) || teams[0];
   const isPrivacyProtected = insights?.status === "insufficient_team_sample";
@@ -1177,6 +1206,9 @@ function ManagerDashboard({ setMobileOpen, setView }) {
         setMobileOpen={setMobileOpen}
         right={
           <div className="flex items-center gap-2">
+            <span className="hidden sm:inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/60 shadow-xs">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live Realtime
+            </span>
             {teams.length > 1 && (
               <select
                 value={selectedTeamId}
@@ -1185,7 +1217,9 @@ function ManagerDashboard({ setMobileOpen, setView }) {
                 style={{ borderColor: T.border }}
               >
                 {teams.map((t) => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
+                  <option key={t.id} value={t.id}>
+                    {t.name}{t.manager_id === user?.id ? " (Your Team)" : ""}
+                  </option>
                 ))}
               </select>
             )}
@@ -1223,10 +1257,12 @@ function ManagerDashboard({ setMobileOpen, setView }) {
             <ShieldCheck size={22} className="text-[#4E6ABF] shrink-0 mt-0.5" />
             <div className="space-y-1">
               <p className="text-sm font-bold text-[#1F2A28]">
-                Privacy Threshold Active (n &ge; 3 Rule)
+                {insights.total_count === 0 ? "Awaiting Check-in Submissions" : "Privacy Threshold Active (n \u2265 3 Rule)"}
               </p>
               <p className="text-xs text-[#7B8494] leading-relaxed">
-                {insights.message || "Fewer than 3 total team check-ins received for this date. Team metrics and feedback are locked to guarantee that individual responses cannot be reverse-engineered."}
+                {insights.total_count === 0
+                  ? `No check-ins have been recorded for ${currentTeam?.name || "this team"} in this pulse cycle. Responses update in real time as employees submit daily check-ins.`
+                  : (insights.message || "Fewer than 3 total team check-ins received. Team metrics are locked to protect employee privacy.")}
               </p>
               <div className="flex flex-wrap gap-2 pt-2">
                 <span className="text-xs font-semibold px-2.5 py-1 rounded-md bg-white border border-blue-100 text-[#1F2A28]">
@@ -1238,6 +1274,11 @@ function ManagerDashboard({ setMobileOpen, setView }) {
                 <span className="text-xs font-semibold px-2.5 py-1 rounded-md bg-white border border-blue-100 text-gray-600">
                   Anonymous: {insights.anonymous_count}
                 </span>
+                {typeof insights.today_count === "number" && (
+                  <span className="text-xs font-semibold px-2.5 py-1 rounded-md bg-white border border-blue-100 text-blue-700">
+                    Today: {insights.today_count}
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -1450,31 +1491,56 @@ function ManagerTeam({ setMobileOpen }) {
 }
 
 function ManagerInsights({ setMobileOpen }) {
+  const { user } = useAuth();
   const { activeOrganizationId } = useOrganization();
   const [insights, setInsights] = useState(null);
+  const [teamName, setTeamName] = useState("Your Team");
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
+  const loadInsights = useCallback(async () => {
     if (!supabase || !activeOrganizationId) return;
-    let isMounted = true;
-    supabase
+    setLoading(true);
+    const { data } = await supabase
       .from("teams")
-      .select("id")
-      .eq("organization_id", activeOrganizationId)
-      .limit(1)
-      .then(async ({ data }) => {
-        if (!isMounted) return;
-        if (data && data[0]?.id) {
-          const res = await supabase.rpc("get_team_aggregated_insights", {
-            p_team_id: data[0].id,
-            p_week_start: getCurrentWeekMonday(),
-          });
-          if (isMounted) setInsights(res.data);
-        }
-        setLoading(false);
+      .select("id, name, manager_id")
+      .eq("organization_id", activeOrganizationId);
+
+    if (data && data.length > 0) {
+      const myTeam = data.find((t) => t.manager_id === user?.id) || data[0];
+      setTeamName(myTeam.name);
+      const res = await supabase.rpc("get_team_aggregated_insights", {
+        p_team_id: myTeam.id,
+        p_week_start: getTodayDate(),
       });
-    return () => { isMounted = false; };
-  }, [activeOrganizationId]);
+      setInsights(res.data);
+    }
+    setLoading(false);
+  }, [activeOrganizationId, user?.id]);
+
+  useEffect(() => {
+    loadInsights();
+
+    if (!supabase || !activeOrganizationId) return;
+    const channel = supabase
+      .channel(`manager-insights-live-${activeOrganizationId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "checkins",
+          filter: `organization_id=eq.${activeOrganizationId}`,
+        },
+        () => {
+          loadInsights();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activeOrganizationId, loadInsights]);
 
   return (
     <div>
