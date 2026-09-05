@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { useAuth } from "../lib/auth";
 import { useOrganization } from "../lib/organization";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
@@ -12,7 +13,7 @@ import {
   Home, MessageSquare, TrendingUp, Users, UserPlus, Layers, ListChecks, UploadCloud,
   Settings, Bell, ChevronDown, Lock, ArrowRight, Search, Menu, X, Sparkles,
   ArrowUp, ArrowDown, ShieldCheck, Check, LogOut, ArrowLeft, Copy, Building2, Plus, AlertCircle,
-  RotateCw, Trash2, Link2, Send, Eye, EyeOff
+  RotateCw, Trash2, Link2, Send, Eye, EyeOff, Mail, ExternalLink
 } from "lucide-react";
 
 
@@ -945,8 +946,13 @@ export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoT
       </div>
 
       {/* Real-time Password Reset Modal */}
-      {showForgotModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      {showForgotModal && typeof document !== "undefined" && createPortal(
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[9999] flex items-center justify-center p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowForgotModal(false);
+          }}
+        >
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 sm:p-7 border border-gray-100 relative animate-in fade-in zoom-in-95 duration-200">
             <button
               type="button"
@@ -1119,7 +1125,8 @@ export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoT
               </form>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -3081,9 +3088,31 @@ const employeeRows = [
   { name: "Nikhil Patel", email: "nikhil.patel@company.com", team: "Sales", manager: "Arjun Rao", role: "Member", status: "Invited" },
 ];
 
+// Helper to construct invitation email content
+function buildInviteEmailDetails({ email, link, role, orgName }) {
+  const roleTitle = (role || "employee").charAt(0).toUpperCase() + (role || "employee").slice(1);
+  const organizationName = orgName || "our organization";
+  const subject = `You're invited to join ${organizationName} on PeoplePulse`;
+  const body = `Hi there,\n\nYou have been invited to join ${organizationName} on PeoplePulse as a ${roleTitle}.\n\nClick the link below to accept your invitation and set up your account:\n${link}\n\nNote: This single-use invitation link is secure and valid for 7 days.\n\nBest regards,\n${organizationName} Team\nPeoplePulse`;
+  return { subject, body, roleTitle, organizationName };
+}
+
+function triggerEmailApp({ email, link, role, orgName }) {
+  const { subject, body } = buildInviteEmailDetails({ email, link, role, orgName });
+  const mailtoUrl = `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  window.location.href = mailtoUrl;
+}
+
+function triggerGmailWeb({ email, link, role, orgName }) {
+  const { subject, body } = buildInviteEmailDetails({ email, link, role, orgName });
+  const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(email)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  window.open(gmailUrl, "_blank", "noopener,noreferrer");
+}
+
 function AdminEmployees({ setMobileOpen }) {
   const {
     activeOrganizationId,
+    activeOrganization,
     sendInvitation,
     resendInvitation,
     revokeInvitation,
@@ -3108,6 +3137,9 @@ function AdminEmployees({ setMobileOpen }) {
   const [inviteError, setInviteError] = useState(null);
   const [generatedInviteLink, setGeneratedInviteLink] = useState(null);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [autoSendEmail, setAutoSendEmail] = useState(true);
+  const [copiedEmailText, setCopiedEmailText] = useState(false);
+  const [emailDispatchedNotice, setEmailDispatchedNotice] = useState(null);
 
   // Pending invites action state
   const [resendingInviteId, setResendingInviteId] = useState(null);
@@ -3229,7 +3261,7 @@ function AdminEmployees({ setMobileOpen }) {
     try {
       const res = await resendInvitation(inv.id);
       if (res?.token) {
-        const link = `${window.location.origin}#invite?token=${res.token}`;
+        const link = `${window.location.origin}/#invite?token=${res.token}`;
         await navigator.clipboard.writeText(link);
         setCopiedInviteId(inv.id);
         setActionNotice({
@@ -3249,6 +3281,52 @@ function AdminEmployees({ setMobileOpen }) {
       setActionNotice({
         type: "error",
         text: err.message || "Failed to resend invitation.",
+      });
+    } finally {
+      setResendingInviteId(null);
+    }
+  };
+
+  const handleEmailPendingInvite = async (inv) => {
+    setResendingInviteId(inv.id);
+    setActionNotice(null);
+    try {
+      const res = await resendInvitation(inv.id);
+      if (res?.token) {
+        const link = `${window.location.origin}/#invite?token=${res.token}`;
+        await navigator.clipboard.writeText(link);
+        const trimmed = inv.email.trim();
+        if (trimmed.toLowerCase().endsWith("@gmail.com")) {
+          triggerGmailWeb({
+            email: trimmed,
+            link,
+            role: inv.role,
+            orgName: activeOrganization?.name,
+          });
+        } else {
+          triggerEmailApp({
+            email: trimmed,
+            link,
+            role: inv.role,
+            orgName: activeOrganization?.name,
+          });
+        }
+        setActionNotice({
+          type: "success",
+          text: `Invitation renewed & email client opened for ${inv.email}! Link also copied to clipboard.`,
+        });
+      } else {
+        setActionNotice({
+          type: "success",
+          text: `Invitation renewed for ${inv.email}!`,
+        });
+      }
+      await loadData();
+    } catch (err) {
+      console.error("[handleEmailPendingInvite] error:", err);
+      setActionNotice({
+        type: "error",
+        text: err.message || "Failed to dispatch email for invitation.",
       });
     } finally {
       setResendingInviteId(null);
@@ -3284,16 +3362,38 @@ function AdminEmployees({ setMobileOpen }) {
     e.preventDefault();
     setInviteError(null);
     setInviteLoading(true);
+    setEmailDispatchedNotice(null);
     try {
+      const trimmedEmail = inviteEmail.trim();
       const res = await sendInvitation({
-        email: inviteEmail.trim(),
+        email: trimmedEmail,
         role: inviteRole,
         teamId: inviteTeamId || null,
       });
 
       if (res?.token) {
-        const link = `${window.location.origin}#invite?token=${res.token}`;
+        const link = `${window.location.origin}/#invite?token=${res.token}`;
         setGeneratedInviteLink(link);
+
+        if (autoSendEmail) {
+          if (trimmedEmail.toLowerCase().endsWith("@gmail.com")) {
+            triggerGmailWeb({
+              email: trimmedEmail,
+              link,
+              role: inviteRole,
+              orgName: activeOrganization?.name,
+            });
+            setEmailDispatchedNotice("Gmail compose opened in a new tab with pre-filled invitation.");
+          } else {
+            triggerEmailApp({
+              email: trimmedEmail,
+              link,
+              role: inviteRole,
+              orgName: activeOrganization?.name,
+            });
+            setEmailDispatchedNotice("Default mail app opened with pre-filled invitation.");
+          }
+        }
       }
       await loadData();
       fetchOrganizations?.();
@@ -3302,6 +3402,26 @@ function AdminEmployees({ setMobileOpen }) {
     } finally {
       setInviteLoading(false);
     }
+  };
+
+  const handleCopyEmailText = async () => {
+    if (!generatedInviteLink) return;
+    const { subject, body } = buildInviteEmailDetails({
+      email: inviteEmail.trim(),
+      link: generatedInviteLink,
+      role: inviteRole,
+      orgName: activeOrganization?.name,
+    });
+    await navigator.clipboard.writeText(`Subject: ${subject}\n\n${body}`);
+    setCopiedEmailText(true);
+    setTimeout(() => setCopiedEmailText(false), 2500);
+  };
+
+  const handleCopyLinkOnly = async () => {
+    if (!generatedInviteLink) return;
+    await navigator.clipboard.writeText(generatedInviteLink);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2500);
   };
 
   const handleAssignTeam = async (userId, newTeamId) => {
@@ -3354,6 +3474,9 @@ function AdminEmployees({ setMobileOpen }) {
               setInviteTeamId("");
               setInviteError(null);
               setGeneratedInviteLink(null);
+              setCopiedLink(false);
+              setCopiedEmailText(false);
+              setEmailDispatchedNotice(null);
               setShowInviteModal(true);
             }}
             className="text-sm font-semibold text-white px-4 py-2 rounded-xl shadow-sm flex items-center gap-1.5 transition-all hover:opacity-90"
@@ -3364,46 +3487,143 @@ function AdminEmployees({ setMobileOpen }) {
         }
       />
 
-      {/* Invite Member Modal */}
-      {showInviteModal && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 modal-backdrop">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl relative modal-dialog">
+      {/* Invite Member Modal - Portaled to document.body for full viewport coverage */}
+      {showInviteModal && typeof document !== "undefined" && createPortal(
+        <div
+          className="fixed inset-0 z-[9999] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 modal-backdrop"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowInviteModal(false);
+          }}
+        >
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl relative modal-dialog border border-gray-100">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold" style={{ color: T.text }}>Invite Team Member</h3>
-              <button onClick={() => setShowInviteModal(false)} className="text-gray-400 hover:text-gray-600">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+                  <UserPlus size={16} />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold" style={{ color: T.text }}>Invite Team Member</h3>
+                  <p className="text-[11px] text-gray-500">Add a coworker to your organization workspace</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowInviteModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-lg hover:bg-gray-100 cursor-pointer"
+              >
                 <X size={18} />
               </button>
             </div>
 
             {generatedInviteLink ? (
-              <div className="space-y-4">
-                <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs">
-                  <p className="font-semibold text-sm mb-1">Invitation Created!</p>
-                  Share this secure single-use invitation link with <b>{inviteEmail}</b>. The token is hashed with SHA-256 in the database.
+              <div className="space-y-4 animate-in fade-in duration-200">
+                <div className="p-3.5 rounded-xl bg-emerald-50/80 border border-emerald-200 text-emerald-900 text-xs space-y-1">
+                  <div className="flex items-center gap-1.5 font-semibold text-emerald-800">
+                    <Check size={14} className="text-emerald-600 shrink-0" />
+                    <span>Invitation Created Successfully!</span>
+                  </div>
+                  <p className="text-emerald-700 leading-relaxed text-[11px]">
+                    Single-use invite link is ready for <b className="text-emerald-900">{inviteEmail}</b>. Link expires automatically in 7 days.
+                  </p>
                 </div>
-                <div className="flex items-center gap-2 p-2.5 rounded-xl border bg-gray-50" style={{ borderColor: T.border }}>
-                  <input
-                    type="text"
-                    readOnly
-                    value={generatedInviteLink}
-                    className="text-xs bg-transparent w-full outline-none text-gray-700 select-all"
-                  />
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(generatedInviteLink);
-                      setCopiedLink(true);
-                      setTimeout(() => setCopiedLink(false), 2500);
-                    }}
-                    className="p-2 rounded-lg text-xs font-semibold text-white shrink-0 flex items-center gap-1"
-                    style={{ background: T.primary }}
-                  >
-                    {copiedLink ? <Check size={14} /> : <Copy size={14} />}
-                    {copiedLink ? "Copied" : "Copy"}
-                  </button>
+
+                {emailDispatchedNotice && (
+                  <div className="p-2.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 text-xs flex items-center gap-2">
+                    <Mail size={14} className="text-blue-600 shrink-0" />
+                    <span className="font-medium text-[11px]">{emailDispatchedNotice}</span>
+                  </div>
+                )}
+
+                {/* Email Dispatch Buttons */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-gray-700">Dispatch Invitation Email:</label>
+                    <span className="text-[10px] text-gray-400">Pre-composed with instructions</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        triggerGmailWeb({
+                          email: inviteEmail.trim(),
+                          link: generatedInviteLink,
+                          role: inviteRole,
+                          orgName: activeOrganization?.name,
+                        })
+                      }
+                      className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl border border-red-200 bg-red-50/60 hover:bg-red-50 text-red-700 text-xs font-semibold transition-all hover:shadow-sm cursor-pointer"
+                    >
+                      <Mail size={13} className="shrink-0 text-red-600" />
+                      <span>Open in Gmail</span>
+                      <ExternalLink size={11} className="opacity-60 shrink-0" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        triggerEmailApp({
+                          email: inviteEmail.trim(),
+                          link: generatedInviteLink,
+                          role: inviteRole,
+                          orgName: activeOrganization?.name,
+                        })
+                      }
+                      className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl border border-blue-200 bg-blue-50/60 hover:bg-blue-50 text-blue-700 text-xs font-semibold transition-all hover:shadow-sm cursor-pointer"
+                    >
+                      <Send size={13} className="shrink-0 text-blue-600" />
+                      <span>Default Mail App</span>
+                      <ExternalLink size={11} className="opacity-60 shrink-0" />
+                    </button>
+                  </div>
                 </div>
+
+                {/* Direct Link & Copy actions */}
+                <div className="space-y-2 pt-1">
+                  <label className="text-xs font-semibold text-gray-700 block">Copy Options:</label>
+                  <div className="flex items-center gap-2 p-2 rounded-xl border bg-gray-50" style={{ borderColor: T.border }}>
+                    <input
+                      type="text"
+                      readOnly
+                      value={generatedInviteLink}
+                      className="text-xs bg-transparent w-full outline-none text-gray-700 select-all font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleCopyLinkOnly}
+                      className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-white shrink-0 flex items-center gap-1 transition-all cursor-pointer"
+                      style={{ background: T.primary }}
+                    >
+                      {copiedLink ? <Check size={13} /> : <Copy size={13} />}
+                      {copiedLink ? "Copied" : "Copy Link"}
+                    </button>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={handleCopyEmailText}
+                      className="flex-1 py-2 px-3 rounded-xl border text-xs font-semibold text-gray-700 hover:bg-gray-50 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                      style={{ borderColor: T.border }}
+                    >
+                      {copiedEmailText ? <Check size={13} className="text-emerald-600" /> : <Copy size={13} />}
+                      {copiedEmailText ? "Copied Full Message!" : "Copy Full Email Invitation"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Message preview toggle */}
+                <details className="text-xs text-gray-500 group border rounded-xl p-2.5 bg-gray-50/50" style={{ borderColor: T.border }}>
+                  <summary className="cursor-pointer font-medium hover:text-gray-800 select-none flex items-center justify-between text-[11px]">
+                    <span>Preview email invitation message</span>
+                    <ChevronDown size={12} className="transition-transform group-open:rotate-180 text-gray-400" />
+                  </summary>
+                  <div className="mt-2 pt-2 border-t text-[11px] text-gray-600 whitespace-pre-wrap leading-relaxed font-mono bg-white p-2.5 rounded-lg border" style={{ borderColor: T.border }}>
+                    {`Subject: You're invited to join ${activeOrganization?.name || "our organization"} on PeoplePulse\n\nHi there,\n\nYou have been invited to join ${activeOrganization?.name || "our organization"} on PeoplePulse as a ${inviteRole.charAt(0).toUpperCase() + inviteRole.slice(1)}.\n\nClick the link below to accept your invitation and set up your account:\n${generatedInviteLink}\n\nNote: This single-use invitation link is secure and valid for 7 days.`}
+                  </div>
+                </details>
+
                 <button
+                  type="button"
                   onClick={() => setShowInviteModal(false)}
-                  className="w-full py-2.5 rounded-xl text-sm font-semibold border text-gray-700 hover:bg-gray-50"
+                  className="w-full py-2.5 rounded-xl text-sm font-semibold border text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
                   style={{ borderColor: T.border }}
                 >
                   Done
@@ -3413,7 +3633,7 @@ function AdminEmployees({ setMobileOpen }) {
               <form onSubmit={handleSendInvite} className="space-y-4">
                 {inviteError && (
                   <div className="p-3 rounded-xl text-xs bg-red-50 text-red-700 border border-red-200 flex items-center gap-2">
-                    <AlertCircle size={15} />
+                    <AlertCircle size={15} className="shrink-0" />
                     <span>{inviteError}</span>
                   </div>
                 )}
@@ -3437,7 +3657,7 @@ function AdminEmployees({ setMobileOpen }) {
                     <select
                       value={inviteRole}
                       onChange={(e) => setInviteRole(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl border text-sm outline-none bg-white"
+                      className="w-full px-3 py-2 rounded-xl border text-sm outline-none bg-white cursor-pointer"
                       style={{ borderColor: T.border }}
                     >
                       <option value="employee">Employee</option>
@@ -3450,7 +3670,7 @@ function AdminEmployees({ setMobileOpen }) {
                     <select
                       value={inviteTeamId}
                       onChange={(e) => setInviteTeamId(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl border text-sm outline-none bg-white"
+                      className="w-full px-3 py-2 rounded-xl border text-sm outline-none bg-white cursor-pointer"
                       style={{ borderColor: T.border }}
                     >
                       <option value="">No team yet</option>
@@ -3461,15 +3681,31 @@ function AdminEmployees({ setMobileOpen }) {
                   </div>
                 </div>
 
+                {/* Auto send email toggle */}
+                <label className="flex items-start gap-2.5 p-3 rounded-xl bg-blue-50/70 border border-blue-100 text-xs text-blue-900 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={autoSendEmail}
+                    onChange={(e) => setAutoSendEmail(e.target.checked)}
+                    className="mt-0.5 rounded border-blue-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                  />
+                  <div>
+                    <span className="font-semibold block text-blue-900">Send invitation email to recipient</span>
+                    <span className="text-[11px] text-blue-700/80 leading-relaxed block">
+                      Opens your mail client (or Gmail) with a pre-formatted invitation ready to send to {inviteEmail ? <b>{inviteEmail}</b> : "the recipient"}.
+                    </span>
+                  </div>
+                </label>
+
                 <p className="text-[11px] text-gray-500">
                   Free tier allows up to 10 seats. Invitations expire automatically after 7 days.
                 </p>
 
-                <div className="flex gap-2 pt-2">
+                <div className="flex gap-2 pt-1">
                   <button
                     type="button"
                     onClick={() => setShowInviteModal(false)}
-                    className="flex-1 py-2.5 rounded-xl text-sm font-semibold border text-gray-700 hover:bg-gray-50"
+                    className="flex-1 py-2.5 rounded-xl text-sm font-semibold border text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
                     style={{ borderColor: T.border }}
                   >
                     Cancel
@@ -3477,16 +3713,24 @@ function AdminEmployees({ setMobileOpen }) {
                   <button
                     type="submit"
                     disabled={inviteLoading}
-                    className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50"
+                    className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50 flex items-center justify-center gap-1.5 transition-all hover:shadow-md cursor-pointer"
                     style={{ background: T.primary }}
                   >
-                    {inviteLoading ? "Generating..." : "Generate Invite →"}
+                    {inviteLoading ? (
+                      <>
+                        <RotateCw size={14} className="animate-spin" />
+                        <span>Preparing Email...</span>
+                      </>
+                    ) : (
+                      <span>Send Invite &amp; Generate Link &rarr;</span>
+                    )}
                   </button>
                 </div>
               </form>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       <Card padded={false} className="overflow-hidden mb-6">
@@ -3668,22 +3912,32 @@ function AdminEmployees({ setMobileOpen }) {
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => handleEmailPendingInvite(inv)}
+                            disabled={isResending || isRevoking}
+                            title={`Renew & open email client for ${inv.email}`}
+                            className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border flex items-center gap-1.5 transition-all hover:bg-blue-50 hover:border-blue-300 text-blue-700 disabled:opacity-50 cursor-pointer"
+                            style={{ borderColor: T.border }}
+                          >
+                            <Mail size={12} className="text-blue-600" />
+                            <span>Email</span>
+                          </button>
                           <button
                             onClick={() => handleResendInvite(inv)}
                             disabled={isResending || isRevoking}
-                            title="Resend & copy fresh invite link"
-                            className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border flex items-center gap-1.5 transition-all hover:bg-indigo-50 hover:border-indigo-300 text-indigo-700 disabled:opacity-50"
+                            title="Renew token & copy fresh invite link"
+                            className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border flex items-center gap-1.5 transition-all hover:bg-indigo-50 hover:border-indigo-300 text-indigo-700 disabled:opacity-50 cursor-pointer"
                             style={{ borderColor: T.border }}
                           >
                             <RotateCw size={12} className={isResending ? "animate-spin" : ""} />
-                            {isResending ? "Renewing..." : isCopied ? "Copied Link!" : "Resend / Copy Link"}
+                            {isResending ? "Renewing..." : isCopied ? "Copied Link!" : "Copy Link"}
                           </button>
                           <button
                             onClick={() => handleRevokeInvite(inv)}
                             disabled={isResending || isRevoking}
                             title="Cancel invitation and free seat"
-                            className="text-xs font-semibold px-2 py-1.5 rounded-lg border text-red-600 hover:bg-red-50 hover:border-red-300 flex items-center gap-1 transition-all disabled:opacity-50"
+                            className="text-xs font-semibold px-2 py-1.5 rounded-lg border text-red-600 hover:bg-red-50 hover:border-red-300 flex items-center gap-1 transition-all disabled:opacity-50 cursor-pointer"
                             style={{ borderColor: T.border }}
                           >
                             <Trash2 size={12} />
@@ -3773,9 +4027,14 @@ function AdminTeams({ setMobileOpen }) {
       />
 
       {/* Create Team Modal */}
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 modal-backdrop">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl relative modal-dialog">
+      {showCreateModal && typeof document !== "undefined" && createPortal(
+        <div
+          className="fixed inset-0 z-[9999] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 modal-backdrop"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowCreateModal(false);
+          }}
+        >
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl relative modal-dialog border border-gray-100">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-bold" style={{ color: T.text }}>Create New Team</h3>
               <button onClick={() => setShowCreateModal(false)} className="text-gray-400 hover:text-gray-600">
@@ -3860,7 +4119,8 @@ function AdminTeams({ setMobileOpen }) {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -4065,9 +4325,14 @@ function AdminQuestions({ setMobileOpen }) {
       />
 
       {/* Add / Edit Question Modal */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 modal-backdrop">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl relative modal-dialog">
+      {showModal && typeof document !== "undefined" && createPortal(
+        <div
+          className="fixed inset-0 z-[9999] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 modal-backdrop"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowModal(false);
+          }}
+        >
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl relative modal-dialog border border-gray-100">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-bold" style={{ color: T.text }}>
                 {modalMode === "add" ? "Add Check-in Question" : "Edit Question"}
@@ -4176,7 +4441,8 @@ function AdminQuestions({ setMobileOpen }) {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       <Card padded={false}>
