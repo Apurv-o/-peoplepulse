@@ -11,7 +11,8 @@ import {
 import {
   Home, MessageSquare, TrendingUp, Users, UserPlus, Layers, ListChecks, UploadCloud,
   Settings, Bell, ChevronDown, Lock, ArrowRight, Search, Menu, X, Sparkles,
-  ArrowUp, ArrowDown, ShieldCheck, Check, LogOut, ArrowLeft, Copy, Building2, Plus, AlertCircle
+  ArrowUp, ArrowDown, ShieldCheck, Check, LogOut, ArrowLeft, Copy, Building2, Plus, AlertCircle,
+  RotateCw, Trash2, Link2, Send
 } from "lucide-react";
 
 
@@ -993,6 +994,10 @@ export function AcceptInviteView({ token, onAccepted, onGoToLogin }) {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
   const [acceptedOrg, setAcceptedOrg] = useState(null);
+
+  useEffect(() => {
+    if (token) setInputToken(token);
+  }, [token]);
 
   const handleAccept = async (e) => {
     e?.preventDefault();
@@ -2476,7 +2481,14 @@ const employeeRows = [
 ];
 
 function AdminEmployees({ setMobileOpen }) {
-  const { activeOrganizationId, sendInvitation, seatUsage, fetchOrganizations } = useOrganization();
+  const {
+    activeOrganizationId,
+    sendInvitation,
+    resendInvitation,
+    revokeInvitation,
+    seatUsage,
+    fetchOrganizations,
+  } = useOrganization();
   const [members, setMembers] = useState([]);
   const [invitations, setInvitations] = useState([]);
   const [teams, setTeams] = useState([]);
@@ -2495,6 +2507,12 @@ function AdminEmployees({ setMobileOpen }) {
   const [inviteError, setInviteError] = useState(null);
   const [generatedInviteLink, setGeneratedInviteLink] = useState(null);
   const [copiedLink, setCopiedLink] = useState(false);
+
+  // Pending invites action state
+  const [resendingInviteId, setResendingInviteId] = useState(null);
+  const [revokingInviteId, setRevokingInviteId] = useState(null);
+  const [copiedInviteId, setCopiedInviteId] = useState(null);
+  const [actionNotice, setActionNotice] = useState(null);
 
   const loadData = useCallback(async () => {
     if (!supabase || !activeOrganizationId) return;
@@ -2565,7 +2583,101 @@ function AdminEmployees({ setMobileOpen }) {
 
   useEffect(() => {
     loadData();
-  }, [loadData]);
+
+    if (!supabase || !activeOrganizationId) return;
+
+    // Real-time Postgres changes subscription on invitations and members
+    const channel = supabase
+      .channel(`admin-employees-live-${activeOrganizationId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "invitations",
+          filter: `organization_id=eq.${activeOrganizationId}`,
+        },
+        () => {
+          loadData();
+          fetchOrganizations?.();
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "organization_members",
+          filter: `organization_id=eq.${activeOrganizationId}`,
+        },
+        () => {
+          loadData();
+          fetchOrganizations?.();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activeOrganizationId, loadData, fetchOrganizations]);
+
+  const handleResendInvite = async (inv) => {
+    setResendingInviteId(inv.id);
+    setActionNotice(null);
+    try {
+      const res = await resendInvitation(inv.id);
+      if (res?.token) {
+        const link = `${window.location.origin}#invite?token=${res.token}`;
+        await navigator.clipboard.writeText(link);
+        setCopiedInviteId(inv.id);
+        setActionNotice({
+          type: "success",
+          text: `Invite link renewed & copied to clipboard for ${inv.email}! Valid for 7 days.`,
+        });
+        setTimeout(() => setCopiedInviteId(null), 3500);
+      } else {
+        setActionNotice({
+          type: "success",
+          text: `Invitation renewed for ${inv.email}!`,
+        });
+      }
+      await loadData();
+    } catch (err) {
+      console.error("[handleResendInvite] error:", err);
+      setActionNotice({
+        type: "error",
+        text: err.message || "Failed to resend invitation.",
+      });
+    } finally {
+      setResendingInviteId(null);
+    }
+  };
+
+  const handleRevokeInvite = async (inv) => {
+    if (!window.confirm(`Are you sure you want to cancel the pending invitation for ${inv.email}?`)) {
+      return;
+    }
+    setRevokingInviteId(inv.id);
+    setActionNotice(null);
+    try {
+      await revokeInvitation(inv.id);
+      setActionNotice({
+        type: "success",
+        text: `Invitation for ${inv.email} has been revoked.`,
+      });
+      await loadData();
+      fetchOrganizations?.();
+    } catch (err) {
+      console.error("[handleRevokeInvite] error:", err);
+      setActionNotice({
+        type: "error",
+        text: err.message || "Failed to revoke invitation.",
+      });
+    } finally {
+      setRevokingInviteId(null);
+    }
+  };
 
   const handleSendInvite = async (e) => {
     e.preventDefault();
@@ -2871,34 +2983,116 @@ function AdminEmployees({ setMobileOpen }) {
 
       {/* Pending Invitations Table */}
       {invitations.length > 0 && (
-        <Card padded={false} className="overflow-hidden">
-          <div className="p-4 border-b bg-gray-50/50" style={{ borderColor: T.border }}>
-            <h4 className="text-sm font-semibold" style={{ color: T.text }}>Pending Invitations ({invitations.length})</h4>
+        <Card padded={false} className="overflow-hidden mt-6">
+          <div className="p-4 border-b bg-gray-50/50 flex items-center justify-between" style={{ borderColor: T.border }}>
+            <div className="flex items-center gap-2">
+              <h4 className="text-sm font-semibold" style={{ color: T.text }}>
+                Pending Invitations ({invitations.length})
+              </h4>
+              <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200/60">
+                Awaiting claim
+              </span>
+            </div>
+            <span className="text-xs text-gray-400">
+              Links valid for 7 days
+            </span>
           </div>
+
+          {actionNotice && (
+            <div
+              className={`p-3 text-xs flex items-center justify-between border-b ${
+                actionNotice.type === "success"
+                  ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                  : "bg-red-50 text-red-800 border-red-200"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                {actionNotice.type === "success" ? (
+                  <Check size={14} className="text-emerald-600 shrink-0" />
+                ) : (
+                  <AlertCircle size={14} className="text-red-600 shrink-0" />
+                )}
+                <span>{actionNotice.text}</span>
+              </div>
+              <button onClick={() => setActionNotice(null)} className="text-gray-400 hover:text-gray-600">
+                <X size={14} />
+              </button>
+            </div>
+          )}
+
           <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[640px]">
+            <table className="w-full text-sm min-w-[680px]">
               <thead>
                 <tr className="text-left" style={{ color: T.muted }}>
-                  {["Invited Email", "Role", "Expires", "Status"].map((h) => (
+                  {["Invited Email", "Role", "Assigned Team", "Expires", "Status", "Actions"].map((h) => (
                     <th key={h} className="px-4 py-3 font-medium text-xs">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {invitations.map((inv) => (
-                  <tr key={inv.id} className="border-t" style={{ borderColor: T.border }}>
-                    <td className="px-4 py-3 font-medium" style={{ color: T.text }}>{inv.email}</td>
-                    <td className="px-4 py-3 capitalize text-xs">{inv.role}</td>
-                    <td className="px-4 py-3 text-xs" style={{ color: T.muted }}>
-                      {new Date(inv.expires_at).toLocaleDateString()}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="text-xs font-medium px-2.5 py-1 rounded-full" style={{ background: T.amberBg, color: "#9A6B1E" }}>
-                        Pending Claim
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                {invitations.map((inv) => {
+                  const assignedTeam = teams.find((t) => t.id === inv.team_id);
+                  const isExpiringSoon = new Date(inv.expires_at).getTime() - Date.now() < 2 * 24 * 3600 * 1000;
+                  const isResending = resendingInviteId === inv.id;
+                  const isRevoking = revokingInviteId === inv.id;
+                  const isCopied = copiedInviteId === inv.id;
+
+                  return (
+                    <tr key={inv.id} className="border-t hover:bg-gray-50/50 transition-colors" style={{ borderColor: T.border }}>
+                      <td className="px-4 py-3 font-medium" style={{ color: T.text }}>
+                        <div className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                          <span>{inv.email}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full capitalize bg-gray-100 text-gray-700">
+                          {inv.role}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-xs" style={{ color: T.text }}>
+                        {assignedTeam ? assignedTeam.name : <span className="text-gray-400">Unassigned</span>}
+                      </td>
+                      <td className="px-4 py-3 text-xs">
+                        <span style={{ color: isExpiringSoon ? "#D96B6B" : T.muted }}>
+                          {new Date(inv.expires_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                        </span>
+                        {isExpiringSoon && (
+                          <span className="ml-1.5 text-[10px] text-red-600 font-semibold">(Expiring soon)</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-xs font-medium px-2.5 py-1 rounded-full" style={{ background: T.amberBg, color: "#9A6B1E" }}>
+                          Pending Claim
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleResendInvite(inv)}
+                            disabled={isResending || isRevoking}
+                            title="Resend & copy fresh invite link"
+                            className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border flex items-center gap-1.5 transition-all hover:bg-indigo-50 hover:border-indigo-300 text-indigo-700 disabled:opacity-50"
+                            style={{ borderColor: T.border }}
+                          >
+                            <RotateCw size={12} className={isResending ? "animate-spin" : ""} />
+                            {isResending ? "Renewing..." : isCopied ? "Copied Link!" : "Resend / Copy Link"}
+                          </button>
+                          <button
+                            onClick={() => handleRevokeInvite(inv)}
+                            disabled={isResending || isRevoking}
+                            title="Cancel invitation and free seat"
+                            className="text-xs font-semibold px-2 py-1.5 rounded-lg border text-red-600 hover:bg-red-50 hover:border-red-300 flex items-center gap-1 transition-all disabled:opacity-50"
+                            style={{ borderColor: T.border }}
+                          >
+                            <Trash2 size={12} />
+                            {isRevoking ? "Revoking..." : "Revoke"}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

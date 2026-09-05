@@ -69,6 +69,16 @@ function AppContent() {
         return;
       }
 
+      // Check if there is a pending invite token waiting to be claimed after login
+      const savedToken = sessionStorage.getItem("peoplepulse_pending_invite_token");
+      if (savedToken) {
+        sessionStorage.removeItem("peoplepulse_pending_invite_token");
+        setInviteToken(savedToken);
+        setCurrentScreen("invite");
+        window.location.hash = `#invite?token=${savedToken}`;
+        return;
+      }
+
       // If user has 0 organizations, prompt onboarding
       if (organizations.length === 0 && !isDemoModeRef.current) {
         setCurrentScreen("onboarding");
@@ -91,7 +101,9 @@ function AppContent() {
       if (hash.startsWith("#invite")) {
         const rawHash = window.location.hash;
         if (rawHash.includes("token=")) {
-          setInviteToken(rawHash.split("token=")[1].split("&")[0]);
+          const t = rawHash.split("token=")[1].split("&")[0];
+          setInviteToken(t);
+          sessionStorage.setItem("peoplepulse_pending_invite_token", t);
         }
         setCurrentScreen("invite");
       } else if (hash === "#onboarding") {

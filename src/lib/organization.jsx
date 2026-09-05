@@ -190,6 +190,27 @@ export function OrganizationProvider({ children }) {
     return data;
   };
 
+  // Resend invitation via RPC
+  const resendInvitation = async (invitationId) => {
+    if (!supabase) throw new Error("Supabase is not configured.");
+    const { data, error } = await supabase.rpc("resend_org_invitation", {
+      p_invitation_id: invitationId,
+    });
+    if (error) throw error;
+    return data;
+  };
+
+  // Revoke invitation via RPC
+  const revokeInvitation = async (invitationId) => {
+    if (!supabase) throw new Error("Supabase is not configured.");
+    const { data, error } = await supabase.rpc("revoke_org_invitation", {
+      p_invitation_id: invitationId,
+    });
+    if (error) throw error;
+    await fetchOrganizations();
+    return data;
+  };
+
   return (
     <OrganizationContext.Provider
       value={{
@@ -207,6 +228,8 @@ export function OrganizationProvider({ children }) {
         refreshOrganization: fetchOrganizations,
         createOrganization,
         sendInvitation,
+        resendInvitation,
+        revokeInvitation,
         acceptInvitation,
       }}
     >
