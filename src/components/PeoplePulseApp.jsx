@@ -558,7 +558,7 @@ function Dropdown({ label }) {
    LOGIN & SIGNUP VIEW (SUPABASE AUTH + DEMO ROLE ACCESS)
    ============================================================ */
 export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoToSignup, onGoToLogin }) {
-  const { signIn, signUp, resetPassword, isConfigured } = useAuth();
+  const { signIn, signUp, resetPassword, requestPasswordReset, verifyAndUpdatePassword, isConfigured } = useAuth();
   const [mode, setMode] = useState(initialMode); // 'login' | 'signup'
   const [name, setName] = useState("");
   const [email, setEmail] = useState("sarah.patel@company.com");
@@ -568,6 +568,100 @@ export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoT
   const [authError, setAuthError] = useState(null);
   const [resetSuccess, setResetSuccess] = useState(false);
   const [signupSuccess, setSignupSuccess] = useState(false);
+
+  // Real-time Password Reset Modal State
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [resetCode, setResetCode] = useState("");
+  const [generatedCode, setGeneratedCode] = useState(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [resetStep, setResetStep] = useState(1); // 1 = request code, 2 = verify & update
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotError, setForgotError] = useState(null);
+  const [forgotSuccess, setForgotSuccess] = useState(null);
+
+  const handleOpenForgotPassword = () => {
+    setForgotEmail(email || "");
+    setResetCode("");
+    setGeneratedCode(null);
+    setNewPassword("");
+    setConfirmPassword("");
+    setResetStep(1);
+    setForgotError(null);
+    setForgotSuccess(null);
+    setShowForgotModal(true);
+  };
+
+  const handleRequestCode = async (e) => {
+    e?.preventDefault();
+    setForgotError(null);
+    setForgotSuccess(null);
+    if (!forgotEmail.trim()) {
+      setForgotError("Please enter your email address.");
+      return;
+    }
+    setForgotLoading(true);
+    try {
+      const res = await requestPasswordReset(forgotEmail);
+      if (res?.code) {
+        setGeneratedCode(res.code);
+        setResetCode(res.code);
+      }
+      setResetStep(2);
+      setForgotSuccess("A 6-digit verification code has been generated. Enter your new password below.");
+    } catch (err) {
+      console.error("[Password Reset Request Error]", err);
+      setForgotError(err.message || "Failed to generate password reset code. Please check your email.");
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  const handleVerifyAndUpdate = async (e) => {
+    e?.preventDefault();
+    setForgotError(null);
+    setForgotSuccess(null);
+
+    if (!resetCode.trim()) {
+      setForgotError("Please enter the 6-digit verification code.");
+      return;
+    }
+    if (newPassword.length < 6) {
+      setForgotError("New password must be at least 6 characters long.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setForgotError("Passwords do not match. Please re-enter.");
+      return;
+    }
+
+    setForgotLoading(true);
+    try {
+      await verifyAndUpdatePassword(forgotEmail, resetCode, newPassword);
+      setForgotSuccess("Password updated successfully! Signing you in...");
+      setTimeout(async () => {
+        try {
+          const res = await signIn(forgotEmail, newPassword);
+          setShowForgotModal(false);
+          const userRole = res?.profile?.role || "employee";
+          onSignIn?.(userRole, { isDemo: false, profile: res?.profile });
+        } catch (signInErr) {
+          setEmail(forgotEmail);
+          setPassword(newPassword);
+          setShowForgotModal(false);
+          setResetSuccess(true);
+        }
+      }, 800);
+    } catch (err) {
+      console.error("[Password Reset Verify Error]", err);
+      setForgotError(err.message || "Invalid or expired reset code. Please try again.");
+    } finally {
+      setForgotLoading(false);
+    }
+  };
 
   // Real Supabase Login / Signup Handler
   const handleRealSubmit = async (e) => {
@@ -619,26 +713,6 @@ export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoT
       }
     } finally {
       setLoading(false);
-    }
-  };
-
-  // Forgot Password Handler
-  const handleForgotPassword = async () => {
-    setAuthError(null);
-    if (!email) {
-      setAuthError("Please enter your email address first.");
-      return;
-    }
-    if (!isConfigured) {
-      setAuthError("Supabase is not configured yet with valid credentials.");
-      return;
-    }
-
-    try {
-      await resetPassword(email);
-      setResetSuccess(true);
-    } catch (err) {
-      setAuthError(err.message || "Unable to send password reset email.");
     }
   };
 
@@ -782,8 +856,8 @@ export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoT
                 {mode === "login" && (
                   <button
                     type="button"
-                    onClick={handleForgotPassword}
-                    className="text-xs font-medium hover:underline"
+                    onClick={handleOpenForgotPassword}
+                    className="text-xs font-medium hover:underline cursor-pointer"
                     style={{ color: T.primary }}
                   >
                     Forgot password?
@@ -869,6 +943,184 @@ export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoT
           </p>
         </div>
       </div>
+
+      {/* Real-time Password Reset Modal */}
+      {showForgotModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 sm:p-7 border border-gray-100 relative animate-in fade-in zoom-in-95 duration-200">
+            <button
+              type="button"
+              onClick={() => setShowForgotModal(false)}
+              className="absolute right-4 top-4 text-gray-400 hover:text-gray-600 transition-colors p-1 rounded-lg hover:bg-gray-100 cursor-pointer"
+              aria-label="Close"
+            >
+              <X size={18} />
+            </button>
+
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#4E6ABF] flex items-center justify-center font-bold">
+                <Lock size={20} />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-[#1F2A28]">Reset Password</h3>
+                <p className="text-xs text-gray-500">
+                  {resetStep === 1 ? "Request a verification code" : "Set your new password"}
+                </p>
+              </div>
+            </div>
+
+            {forgotError && (
+              <div className="mb-4 p-3 rounded-xl text-xs bg-red-50 border border-red-200 text-red-700 leading-relaxed flex items-start gap-2">
+                <AlertCircle size={14} className="shrink-0 mt-0.5" />
+                <span>{forgotError}</span>
+              </div>
+            )}
+
+            {forgotSuccess && (
+              <div className="mb-4 p-3 rounded-xl text-xs bg-green-50 border border-green-200 text-green-700 leading-relaxed">
+                {forgotSuccess}
+              </div>
+            )}
+
+            {resetStep === 1 ? (
+              <form onSubmit={handleRequestCode} className="space-y-4">
+                <div>
+                  <label className="text-xs font-semibold block mb-1.5 text-gray-700">Work Email</label>
+                  <input
+                    type="email"
+                    value={forgotEmail}
+                    onChange={(e) => setForgotEmail(e.target.value)}
+                    placeholder="you@company.com"
+                    required
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:ring-2 focus:ring-blue-200 bg-white transition-all"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowForgotModal(false)}
+                    className="flex-1 py-2.5 rounded-xl text-xs font-semibold border border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={forgotLoading}
+                    className="flex-1 py-2.5 rounded-xl text-xs font-semibold text-white transition-all hover:shadow-md disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer"
+                    style={{ background: T.primary }}
+                  >
+                    {forgotLoading ? (
+                      <>
+                        <RotateCw size={13} className="animate-spin" />
+                        <span>Sending...</span>
+                      </>
+                    ) : (
+                      <span>Send Reset Code &rarr;</span>
+                    )}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <form onSubmit={handleVerifyAndUpdate} className="space-y-3.5">
+                {generatedCode && (
+                  <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-between">
+                    <div>
+                      <p className="text-[10px] uppercase font-bold text-blue-800 tracking-wider">Instant Verification Code</p>
+                      <p className="font-mono text-base font-bold text-[#4E6ABF] tracking-widest mt-0.5">{generatedCode}</p>
+                    </div>
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">Auto-filled</span>
+                  </div>
+                )}
+
+                <div>
+                  <label className="text-xs font-semibold block mb-1 text-gray-700">6-Digit Verification Code</label>
+                  <input
+                    type="text"
+                    value={resetCode}
+                    onChange={(e) => setResetCode(e.target.value.trim())}
+                    placeholder="e.g. 123456"
+                    required
+                    maxLength={6}
+                    className="w-full px-3.5 py-2 rounded-xl border border-gray-200 text-sm font-mono tracking-widest outline-none focus:ring-2 focus:ring-blue-200 bg-white transition-all text-center font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold block mb-1 text-gray-700">New Password</label>
+                  <div className="relative">
+                    <input
+                      type={showNewPassword ? "text" : "password"}
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      placeholder="At least 6 characters"
+                      required
+                      minLength={6}
+                      className="w-full pl-3.5 pr-10 py-2 rounded-xl border border-gray-200 text-sm outline-none focus:ring-2 focus:ring-blue-200 bg-white transition-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none p-1 cursor-pointer"
+                      tabIndex={-1}
+                    >
+                      {showNewPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold block mb-1 text-gray-700">Confirm New Password</label>
+                  <div className="relative">
+                    <input
+                      type={showConfirmPassword ? "text" : "password"}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Re-enter new password"
+                      required
+                      minLength={6}
+                      className="w-full pl-3.5 pr-10 py-2 rounded-xl border border-gray-200 text-sm outline-none focus:ring-2 focus:ring-blue-200 bg-white transition-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none p-1 cursor-pointer"
+                      tabIndex={-1}
+                    >
+                      {showConfirmPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setResetStep(1)}
+                    className="py-2.5 px-3 rounded-xl text-xs font-semibold border border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={forgotLoading}
+                    className="flex-1 py-2.5 rounded-xl text-xs font-semibold text-white transition-all hover:shadow-md disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer"
+                    style={{ background: T.primary }}
+                  >
+                    {forgotLoading ? (
+                      <>
+                        <RotateCw size={13} className="animate-spin" />
+                        <span>Updating Password...</span>
+                      </>
+                    ) : (
+                      <span>Update Password & Sign In &rarr;</span>
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

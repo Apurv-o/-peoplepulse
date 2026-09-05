@@ -126,6 +126,33 @@ export function AuthProvider({ children }) {
     return data;
   };
 
+  const requestPasswordReset = async (email) => {
+    if (!isSupabaseConfigured || !supabase) {
+      throw new Error("Supabase is not configured yet with valid credentials.");
+    }
+    const cleanEmail = email.trim().toLowerCase();
+    const { data, error } = await supabase.rpc("request_password_reset", {
+      p_email: cleanEmail,
+    });
+    if (error) throw error;
+    supabase.auth.resetPasswordForEmail(cleanEmail).catch(() => {});
+    return data;
+  };
+
+  const verifyAndUpdatePassword = async (email, code, newPassword) => {
+    if (!isSupabaseConfigured || !supabase) {
+      throw new Error("Supabase is not configured yet with valid credentials.");
+    }
+    const cleanEmail = email.trim().toLowerCase();
+    const { data, error } = await supabase.rpc("verify_and_update_password", {
+      p_email: cleanEmail,
+      p_code: code.trim(),
+      p_new_password: newPassword,
+    });
+    if (error) throw error;
+    return data;
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -139,6 +166,8 @@ export function AuthProvider({ children }) {
         signIn,
         signOut,
         resetPassword,
+        requestPasswordReset,
+        verifyAndUpdatePassword,
         refreshProfile: () => user && fetchProfile(user.id),
       }}
     >
