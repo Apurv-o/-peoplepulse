@@ -27,7 +27,16 @@ Deno.serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
     const supabaseServiceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-    const geminiApiKey = Deno.env.get("GEMINI_API_KEY");
+
+    // Collect all available Gemini API keys with automatic failover support
+    const geminiApiKeys = [
+      Deno.env.get("GEMINI_API_KEY"),
+      Deno.env.get("GEMINI_API_KEY_2"),
+      Deno.env.get("GEMINI_API_KEY_3"),
+      Deno.env.get("GEMINI_API_KEY_BACKUP"),
+    ]
+      .filter((k): k is string => Boolean(k && k.trim().length > 0))
+      .map((k) => k.trim());
 
     // 1. Verify caller authorization header
     const authHeader = req.headers.get("Authorization");
@@ -188,10 +197,10 @@ Deno.serve(async (req) => {
 
     let sentimentResult: SentimentOutput | null = commonPhrases[normalized] || null;
 
-    // 7. If not in fast dictionary, call Gemini with strict token-budget limits
+    // 7. If not in fast dictionary, call Gemini with strict token-budget limits and multi-key failover
     if (!sentimentResult) {
-      if (!geminiApiKey) {
-        console.warn("[analyze-sentiment] GEMINI_API_KEY secret is not set. Skipping AI processing gracefully.");
+      if (geminiApiKeys.length === 0) {
+        console.warn("[analyze-sentiment] No Gemini API key secrets configured (GEMINI_API_KEY or GEMINI_API_KEY_2). Skipping AI processing gracefully.");
         return new Response(
           JSON.stringify({ status: "unavailable", message: "AI processing secret not configured" }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -245,31 +254,53 @@ Deno.serve(async (req) => {
 
         let geminiResponse: Response | null = null;
         let lastErrText = "";
+        let successfulKeyIndex = -1;
 
-        for (const modelName of candidateModels) {
-          const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiApiKey}`;
-          const res = await fetch(geminiEndpoint, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(requestBody),
-          });
+        // Iterate through configured keys with automatic failover (Key 1 -> Key 2 -> Key 3)
+        for (let keyIdx = 0; keyIdx < geminiApiKeys.length; keyIdx++) {
+          const currentApiKey = geminiApiKeys[keyIdx];
 
-          if (res.ok) {
-            geminiResponse = res;
-            break;
-          } else {
-            lastErrText = await res.text().catch(() => "");
-            console.warn(`[Gemini API Warning] Model ${modelName} returned HTTP ${res.status}: ${lastErrText.slice(0, 200)}`);
-            if (res.status !== 404) {
+          for (const modelName of candidateModels) {
+            try {
+              const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${currentApiKey}`;
+              const res = await fetch(geminiEndpoint, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(requestBody),
+              });
+
+              if (res.ok) {
+                geminiResponse = res;
+                successfulKeyIndex = keyIdx;
+                break;
+              } else {
+                lastErrText = await res.text().catch(() => "");
+                console.warn(`[Gemini API Warning] Key #${keyIdx + 1} (${modelName}) HTTP ${res.status}: ${lastErrText.slice(0, 180)}`);
+
+                // If 429 (quota exhausted/rate limit) or 400/403 (invalid key/forbidden), fail over to next key immediately!
+                if (res.status === 429 || res.status === 403 || res.status === 400) {
+                  console.warn(`[Gemini Failover] Key #${keyIdx + 1} failed with HTTP ${res.status}. Automatically switching to backup key...`);
+                  break;
+                }
+              }
+            } catch (fetchErr) {
+              console.warn(`[Gemini Network Warning] Key #${keyIdx + 1} network error:`, (fetchErr as Error).message);
               break;
             }
+          }
+
+          if (geminiResponse && geminiResponse.ok) {
+            if (keyIdx > 0) {
+              console.log(`[Gemini Failover Success] Successfully processed sentiment using backup Key #${keyIdx + 1}!`);
+            }
+            break;
           }
         }
 
         if (!geminiResponse || !geminiResponse.ok) {
-          console.error(`[Gemini API Error] Final failure: ${lastErrText.slice(0, 300)}`);
+          console.error(`[Gemini API Error] All ${geminiApiKeys.length} API key(s) failed. Last error: ${lastErrText.slice(0, 300)}`);
           return new Response(
-            JSON.stringify({ status: "unavailable", message: "Gemini API request failed" }),
+            JSON.stringify({ status: "unavailable", message: "All Gemini API keys failed or rate-limited" }),
             { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
