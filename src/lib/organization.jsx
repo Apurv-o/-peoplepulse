@@ -278,6 +278,35 @@ export function OrganizationProvider({ children }) {
     return data;
   };
 
+  // Remove member from organization
+  const removeMember = async (userId) => {
+    if (!supabase || !activeOrganization) throw new Error("Active organization is required.");
+    let removedViaRpc = false;
+    try {
+      const { data, error } = await supabase.rpc("remove_org_member", {
+        p_org_id: activeOrganization.id,
+        p_user_id: userId,
+      });
+      if (!error && data?.success) {
+        removedViaRpc = true;
+      }
+    } catch (e) {
+      // Fall back
+    }
+
+    if (!removedViaRpc) {
+      const { error: delErr } = await supabase
+        .from("organization_members")
+        .delete()
+        .eq("organization_id", activeOrganization.id)
+        .eq("user_id", userId);
+      if (delErr) throw delErr;
+    }
+
+    await fetchOrganizations();
+    await refreshUsageAndLimits();
+  };
+
   const effectiveLoading = loading || (Boolean(user) && lastFetchedUserId !== user.id);
 
   return (
@@ -301,6 +330,7 @@ export function OrganizationProvider({ children }) {
         resendInvitation,
         revokeInvitation,
         acceptInvitation,
+        removeMember,
       }}
     >
       {children}

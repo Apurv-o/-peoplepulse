@@ -13,7 +13,7 @@ import {
   Home, MessageSquare, TrendingUp, Users, UserPlus, Layers, ListChecks, UploadCloud,
   Settings, Bell, ChevronDown, Lock, ArrowRight, Search, Menu, X, Sparkles,
   ArrowUp, ArrowDown, ShieldCheck, Check, LogOut, ArrowLeft, Copy, Building2, Plus, AlertCircle,
-  RotateCw, Trash2, Link2, Send, Eye, EyeOff, Mail, ExternalLink
+  RotateCw, Trash2, Link2, Send, Eye, EyeOff, Mail, ExternalLink, UserX
 } from "lucide-react";
 
 
@@ -3710,10 +3710,11 @@ function AdminEmployees({ setMobileOpen }) {
   const [copiedEmailText, setCopiedEmailText] = useState(false);
   const [emailDispatchedNotice, setEmailDispatchedNotice] = useState(null);
 
-  // Pending invites action state
+  // Actions state
   const [resendingInviteId, setResendingInviteId] = useState(null);
   const [revokingInviteId, setRevokingInviteId] = useState(null);
   const [copiedInviteId, setCopiedInviteId] = useState(null);
+  const [removingMemberId, setRemovingMemberId] = useState(null);
   const [actionNotice, setActionNotice] = useState(null);
 
   const loadData = useCallback(async () => {
@@ -4042,6 +4043,75 @@ function AdminEmployees({ setMobileOpen }) {
     }
   };
 
+  const handleRemoveMember = async (m) => {
+    const p = m.profiles || {};
+    const memberName = p.name || p.email || "this member";
+    if (m.role === "owner") {
+      alert("The organization owner cannot be removed.");
+      return;
+    }
+    if (
+      !window.confirm(
+        `Are you sure you want to remove ${memberName} (${p.email || m.user_id}) from ${activeOrganization?.name || "this organization"}?\n\nThey will immediately lose access and their seat will be freed.`
+      )
+    ) {
+      return;
+    }
+
+    setRemovingMemberId(m.id);
+    setActionNotice(null);
+    try {
+      // 1. Try secure RPC remove_org_member first
+      let removedViaRpc = false;
+      try {
+        const { data: rpcData, error: rpcErr } = await supabase.rpc("remove_org_member", {
+          p_org_id: activeOrganizationId,
+          p_user_id: m.user_id,
+        });
+        if (!rpcErr && rpcData?.success) {
+          removedViaRpc = true;
+        }
+      } catch (e) {
+        // Fall back to direct table deletion
+      }
+
+      // 2. Fallback: direct table operations
+      if (!removedViaRpc) {
+        const orgTeamIds = teams.map((t) => t.id);
+        if (orgTeamIds.length > 0 && m.user_id) {
+          await supabase
+            .from("team_members")
+            .delete()
+            .eq("user_id", m.user_id)
+            .in("team_id", orgTeamIds);
+        }
+
+        const { error: delErr } = await supabase
+          .from("organization_members")
+          .delete()
+          .eq("id", m.id);
+
+        if (delErr) throw delErr;
+      }
+
+      setActionNotice({
+        type: "success",
+        text: `${memberName} has been removed from ${activeOrganization?.name || "the organization"}. 1 seat freed.`,
+      });
+
+      await loadData();
+      fetchOrganizations?.();
+    } catch (err) {
+      console.error("[handleRemoveMember] error:", err);
+      setActionNotice({
+        type: "error",
+        text: err.message || "Failed to remove member.",
+      });
+    } finally {
+      setRemovingMemberId(null);
+    }
+  };
+
   const filteredMembers = members.filter((m) => {
     const p = m.profiles || {};
     const nameMatch = (p.name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -4323,6 +4393,28 @@ function AdminEmployees({ setMobileOpen }) {
         document.body
       )}
 
+      {actionNotice && (
+        <div
+          className={`mb-4 p-3 text-xs flex items-center justify-between rounded-xl border ${
+            actionNotice.type === "success"
+              ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+              : "bg-red-50 text-red-800 border-red-200"
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {actionNotice.type === "success" ? (
+              <Check size={14} className="text-emerald-600 shrink-0" />
+            ) : (
+              <AlertCircle size={14} className="text-red-600 shrink-0" />
+            )}
+            <span>{actionNotice.text}</span>
+          </div>
+          <button onClick={() => setActionNotice(null)} className="text-gray-400 hover:text-gray-600 cursor-pointer">
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
       <Card padded={false} className="overflow-hidden mb-6">
         <div className="p-4 flex flex-wrap gap-2 border-b" style={{ borderColor: T.border }}>
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg border flex-1 min-w-[180px]" style={{ borderColor: T.border }}>
@@ -4352,7 +4444,7 @@ function AdminEmployees({ setMobileOpen }) {
           <table className="w-full text-sm min-w-[640px]">
             <thead>
               <tr className="text-left" style={{ color: T.muted }}>
-                {["Member", "Role", "Assigned Team", "Status", "Joined"].map((h) => (
+                {["Member", "Role", "Assigned Team", "Status", "Joined", "Actions"].map((h) => (
                   <th key={h} className="px-4 py-3 font-medium text-xs">{h}</th>
                 ))}
               </tr>
@@ -4360,6 +4452,9 @@ function AdminEmployees({ setMobileOpen }) {
             <tbody>
               {filteredMembers.map((m) => {
                 const p = m.profiles || {};
+                const isRemoving = removingMemberId === m.id;
+                const isOwner = m.role === "owner";
+
                 return (
                   <tr key={m.id} className="border-t hover:bg-gray-50 transition-colors" style={{ borderColor: T.border }}>
                     <td className="px-4 py-3">
@@ -4367,7 +4462,12 @@ function AdminEmployees({ setMobileOpen }) {
                       <p className="text-xs" style={{ color: T.muted }}>{p.email || m.user_id}</p>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="capitalize font-medium text-xs px-2.5 py-1 rounded-full bg-blue-50 text-blue-700">
+                      <span className={`capitalize font-medium text-xs px-2.5 py-1 rounded-full ${
+                        m.role === "owner" ? "bg-purple-50 text-purple-700" :
+                        m.role === "admin" ? "bg-indigo-50 text-indigo-700" :
+                        m.role === "manager" ? "bg-blue-50 text-blue-700" :
+                        "bg-gray-100 text-gray-700"
+                      }`}>
                         {m.role}
                       </span>
                     </td>
@@ -4378,7 +4478,7 @@ function AdminEmployees({ setMobileOpen }) {
                         </span>
                       ) : (
                         <select
-                          disabled={assigningUserId === m.user_id}
+                          disabled={assigningUserId === m.user_id || isRemoving}
                           value={teamMemberships[m.user_id] || ""}
                           onChange={(e) => handleAssignTeam(m.user_id, e.target.value)}
                           className="text-xs border rounded-lg px-2 py-1 bg-white outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer max-w-[170px] truncate"
@@ -4401,12 +4501,39 @@ function AdminEmployees({ setMobileOpen }) {
                     <td className="px-4 py-3 text-xs" style={{ color: T.muted }}>
                       {(m.joined_at || m.created_at) ? new Date(m.joined_at || m.created_at).toLocaleDateString() : "—"}
                     </td>
+                    <td className="px-4 py-3">
+                      {isOwner ? (
+                        <span className="text-xs text-gray-400 italic px-2 py-1 select-none">
+                          Owner
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => handleRemoveMember(m)}
+                          disabled={isRemoving}
+                          title={`Remove ${p.name || p.email || "employee"} from organization`}
+                          className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border text-red-600 hover:bg-red-50 hover:border-red-300 flex items-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer"
+                          style={{ borderColor: T.border }}
+                        >
+                          {isRemoving ? (
+                            <>
+                              <RotateCw size={12} className="animate-spin" />
+                              <span>Removing...</span>
+                            </>
+                          ) : (
+                            <>
+                              <UserX size={13} className="text-red-500" />
+                              <span>Remove</span>
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 );
               })}
               {filteredMembers.length === 0 && !loading && (
                 <tr>
-                  <td colSpan={5} className="p-8 text-center text-sm text-gray-500">
+                  <td colSpan={6} className="p-8 text-center text-sm text-gray-500">
                     No members matched your search criteria.
                   </td>
                 </tr>
