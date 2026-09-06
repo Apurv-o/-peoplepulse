@@ -11,9 +11,14 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(isSupabaseConfigured);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState(() => {
     if (typeof window === "undefined") return false;
+    if (sessionStorage.getItem("peoplepulse_password_recovery") === "true") return true;
     const hash = (window.location.hash || "").toLowerCase();
     const search = (window.location.search || "").toLowerCase();
-    return hash.includes("type=recovery") || search.includes("type=recovery") || hash.includes("reset-password");
+    const isRec = hash.includes("type=recovery") || search.includes("type=recovery") || hash.includes("reset-password") || search.includes("reset-password") || search.includes("reset_password");
+    if (isRec) {
+      try { sessionStorage.setItem("peoplepulse_password_recovery", "true"); } catch (e) {}
+    }
+    return isRec;
   });
 
   const profileRef = useRef(profile);
@@ -79,6 +84,7 @@ export function AuthProvider({ children }) {
 
         if (event === "PASSWORD_RECOVERY") {
           setIsPasswordRecovery(true);
+          try { sessionStorage.setItem("peoplepulse_password_recovery", "true"); } catch (e) {}
         }
 
         if (currentSession?.user) {
@@ -190,6 +196,7 @@ export function AuthProvider({ children }) {
       password: newPassword,
     });
     if (error) throw error;
+    try { sessionStorage.removeItem("peoplepulse_password_recovery"); } catch (e) {}
     setIsPasswordRecovery(false);
     return data;
   };

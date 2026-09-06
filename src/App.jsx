@@ -7,9 +7,11 @@ import { OrganizationProvider, useOrganization } from "./lib/organization";
 // Helper to determine if current URL is a Supabase password recovery link
 function isRecoveryUrl() {
   if (typeof window === "undefined") return false;
+  if (sessionStorage.getItem("peoplepulse_password_recovery") === "true") return true;
+
   const hash = (window.location.hash || "").toLowerCase();
   const search = (window.location.search || "").toLowerCase();
-  return (
+  const isRec = (
     hash.includes("type=recovery") ||
     hash.startsWith("#reset-password") ||
     hash.includes("reset-password") ||
@@ -18,6 +20,13 @@ function isRecoveryUrl() {
     search.includes("reset_password") ||
     search.includes("reset-password")
   );
+
+  if (isRec) {
+    try {
+      sessionStorage.setItem("peoplepulse_password_recovery", "true");
+    } catch (e) {}
+  }
+  return isRec;
 }
 
 function AppContent() {
@@ -213,13 +222,17 @@ function AppContent() {
     return (
       <ResetPasswordView
         onPasswordResetSuccess={() => {
+          try { sessionStorage.removeItem("peoplepulse_password_recovery"); } catch (e) {}
           if (organizations && organizations.length > 0) {
             navigateTo("app");
           } else {
             navigateTo("login");
           }
         }}
-        onCancel={() => navigateTo("login")}
+        onCancel={() => {
+          try { sessionStorage.removeItem("peoplepulse_password_recovery"); } catch (e) {}
+          navigateTo("login");
+        }}
       />
     );
   }

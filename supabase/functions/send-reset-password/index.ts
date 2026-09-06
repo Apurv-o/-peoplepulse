@@ -38,12 +38,15 @@ Deno.serve(async (req) => {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    let redirectTarget = redirectTo || "https://peoplepulse-app.vercel.app/#reset-password";
+    let redirectTarget = redirectTo || "https://peoplepulse-app.vercel.app/?type=recovery#reset-password";
     if (redirectTarget.includes("peoplepulse-n-8650.vercel.app")) {
       redirectTarget = redirectTarget.replace("peoplepulse-n-8650.vercel.app", "peoplepulse-app.vercel.app");
     }
-    if (!redirectTarget.includes("#reset-password")) {
-      redirectTarget = `${redirectTarget.replace(/\/$/, "")}/#reset-password`;
+    if (!redirectTarget.includes("type=recovery")) {
+      const parts = redirectTarget.split("#");
+      const base = parts[0];
+      const sep = base.includes("?") ? "&" : "?";
+      redirectTarget = `${base}${sep}type=recovery#${parts[1] || "reset-password"}`;
     }
 
     const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
