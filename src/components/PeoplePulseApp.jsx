@@ -5921,6 +5921,7 @@ function AdminSettings({ setMobileOpen, onSignOut, onReturnHome }) {
                 <li>Your memberships in <strong>{activeOrganization?.name || "your organization"}</strong> will be terminated.</li>
                 <li>You will be logged out of all devices and active sessions revoked.</li>
                 <li>Past pulse check-in metrics remain anonymized without your identity.</li>
+                <li>A final confirmation receipt will be automatically sent to your email.</li>
               </ul>
             </div>
 
