@@ -144,9 +144,13 @@ export function AuthProvider({ children }) {
       throw new Error("Supabase is not configured yet with valid credentials.");
     }
     const cleanEmail = email.trim().toLowerCase();
-    const redirectUrl = typeof window !== "undefined"
-      ? `${window.location.origin}/#reset-password`
-      : undefined;
+    let origin = typeof window !== "undefined" && window.location?.origin
+      ? window.location.origin
+      : "https://peoplepulse-app.vercel.app";
+    if (origin.includes("peoplepulse-n-8650.vercel.app")) {
+      origin = "https://peoplepulse-app.vercel.app";
+    }
+    const redirectUrl = `${origin.replace(/\/$/, "")}/#reset-password`;
 
     // 1. Dispatch via high-deliverability Brevo Edge Function
     try {
