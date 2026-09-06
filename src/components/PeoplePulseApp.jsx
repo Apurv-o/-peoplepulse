@@ -97,6 +97,41 @@ function Card({ children, className = "", padded = true, interactive = false }) 
   );
 }
 
+function ToggleSwitch({ checked, onChange, disabled = false, ariaLabel = "Toggle" }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={ariaLabel}
+      disabled={disabled}
+      onClick={onChange}
+      className={`group relative inline-flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full p-0.5 transition-all duration-300 ease-in-out border-0 outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4E6ABF] focus-visible:ring-offset-2 select-none ${
+        disabled ? "opacity-50 cursor-not-allowed" : ""
+      } ${
+        checked
+          ? "bg-[#4E6ABF] shadow-[0_2px_8px_rgba(78,106,191,0.35)]"
+          : "bg-gray-200 hover:bg-gray-300"
+      }`}
+      style={{
+        background: checked ? "linear-gradient(135deg, #4E6ABF 0%, #3B5299 100%)" : undefined,
+      }}
+    >
+      <span
+        className={`pointer-events-none flex items-center justify-center h-6 w-6 transform rounded-full bg-white shadow-[0_2px_5px_rgba(0,0,0,0.18)] transition-all duration-300 cubic-bezier(0.34, 1.56, 0.64, 1) group-active:scale-95 ${
+          checked ? "translate-x-5" : "translate-x-0"
+        }`}
+      >
+        {checked ? (
+          <ShieldCheck size={12} className="text-[#4E6ABF] animate-in zoom-in-75 duration-200" />
+        ) : (
+          <span className="w-1.5 h-1.5 rounded-full bg-gray-300" />
+        )}
+      </span>
+    </button>
+  );
+}
+
 function RiskBadge({ risk }) {
   const map = {
     Low: { bg: T.positiveBg, fg: "#3F7A5C" },
@@ -2941,44 +2976,60 @@ function EmployeeCheckin({ setMobileOpen, onSubmitted }) {
         <p className="text-xs text-right mt-1" style={{ color: T.muted }}>{note.length} / 500</p>
       </Card>
 
-      <Card className="mt-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-2">
+      <Card className={`mt-4 transition-all duration-300 ${anon ? "border-blue-200/90 bg-blue-50/15 shadow-sm" : ""}`}>
+        <div
+          className="flex items-center justify-between gap-4 cursor-pointer select-none"
+          onClick={() => setAnon(!anon)}
+        >
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
               <p className="text-sm font-semibold" style={{ color: T.text }}>Submit anonymously</p>
-              {anon && (
-                <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
+              {anon ? (
+                <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1 animate-in fade-in zoom-in-95 duration-200">
                   <ShieldCheck size={11} className="text-emerald-600" /> Identity Protected
+                </span>
+              ) : (
+                <span className="text-[10px] font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+                  Public Check-in
                 </span>
               )}
             </div>
-            <p className="text-xs mt-0.5 flex items-center gap-1 text-gray-500">
-              <Lock size={11} className="text-gray-400 shrink-0" />
-              {anon
-                ? "Your name and account are completely detached before saving to the database."
-                : "Your manager will see your name attached to this check-in."}
+            <p className="text-xs mt-1 flex items-center gap-1.5 text-gray-500 leading-relaxed">
+              <Lock size={12} className={`shrink-0 transition-colors duration-200 ${anon ? "text-[#4E6ABF]" : "text-gray-400"}`} />
+              <span>
+                {anon
+                  ? "Your name and account are completely detached before saving to the database."
+                  : "Your manager will see your name attached to this check-in."}
+              </span>
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => setAnon(!anon)}
-            className="w-11 h-6 rounded-full relative shrink-0 transition-colors"
-            style={{ background: anon ? T.primary : T.border }}
-          >
-            <span
-              className="absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform duration-200 shadow-sm"
-              style={{ transform: anon ? "translateX(22px)" : "translateX(2px)" }}
+          <div onClick={(e) => e.stopPropagation()} className="shrink-0">
+            <ToggleSwitch
+              checked={anon}
+              onChange={() => setAnon(!anon)}
+              ariaLabel="Submit anonymously toggle"
             />
-          </button>
+          </div>
         </div>
       </Card>
 
       <button
         disabled={!complete || submitting || Boolean(user && teamError)}
         onClick={handleSubmit}
-        className="w-full mt-5 py-3 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2 disabled:opacity-40 transition-all duration-200 hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 active:scale-98"
-        style={{ background: T.primary, boxShadow: complete ? "0 10px 24px -8px rgba(78,106,191,0.5)" : "none" }}
+        className="w-full mt-5 py-3.5 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2.5 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-300 hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.99] group cursor-pointer relative overflow-hidden"
+        style={{
+          background: complete
+            ? "linear-gradient(135deg, #4E6ABF 0%, #344A91 100%)"
+            : T.primary,
+          boxShadow: complete
+            ? "0 12px 24px -6px rgba(78, 106, 191, 0.45), 0 4px 12px -2px rgba(78, 106, 191, 0.2)"
+            : "none",
+        }}
       >
+        {complete && !submitting && (
+          <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out pointer-events-none" />
+        )}
+
         {submitting ? (
           <>
             <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
@@ -2987,7 +3038,7 @@ function EmployeeCheckin({ setMobileOpen, onSubmitted }) {
         ) : (
           <>
             <span>Submit daily check-in</span>
-            <ArrowRight size={15} />
+            <ArrowRight size={16} className="transition-transform duration-200 group-hover:translate-x-1" />
           </>
         )}
       </button>
@@ -5672,19 +5723,22 @@ function AdminImports({ setMobileOpen }) {
 function ToggleRow({ label, sub, defaultOn = false }) {
   const [on, setOn] = useState(defaultOn);
   return (
-    <div className="flex items-center justify-between py-3.5 border-b last:border-0" style={{ borderColor: T.border }}>
-      <div>
+    <div
+      className="flex items-center justify-between py-3.5 border-b last:border-0 cursor-pointer select-none gap-4"
+      style={{ borderColor: T.border }}
+      onClick={() => setOn(!on)}
+    >
+      <div className="min-w-0 flex-1">
         <p className="text-sm font-medium" style={{ color: T.text }}>{label}</p>
         {sub && <p className="text-xs mt-0.5" style={{ color: T.muted }}>{sub}</p>}
       </div>
-      <button
-        type="button"
-        onClick={() => setOn(!on)}
-        className="w-11 h-6 rounded-full relative shrink-0 transition-colors"
-        style={{ background: on ? T.primary : T.border }}
-      >
-        <span className="absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform" style={{ transform: on ? "translateX(22px)" : "translateX(2px)" }} />
-      </button>
+      <div onClick={(e) => e.stopPropagation()} className="shrink-0">
+        <ToggleSwitch
+          checked={on}
+          onChange={() => setOn(!on)}
+          ariaLabel={label}
+        />
+      </div>
     </div>
   );
 }
