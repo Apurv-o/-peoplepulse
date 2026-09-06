@@ -249,6 +249,50 @@ export function AuthProvider({ children }) {
     return data;
   };
 
+  const deleteAccount = async () => {
+    if (!isSupabaseConfigured || !supabase) {
+      throw new Error("Supabase is not configured yet with valid credentials.");
+    }
+
+    const { data: sessionData } = await supabase.auth.getSession();
+    const activeToken = sessionData?.session?.access_token;
+    if (!activeToken) {
+      throw new Error("No active session found. Please sign in again.");
+    }
+
+    // 1. Invoke delete-account Edge Function
+    const { data, error } = await supabase.functions.invoke("delete-account", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${activeToken}`,
+      },
+    });
+
+    if (error) {
+      console.error("[deleteAccount error]:", error);
+      throw new Error(error.message || "Failed to delete account. Please try again.");
+    }
+
+    // 2. Perform clean local logout & storage purge
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.warn("[deleteAccount signOut]:", e);
+    }
+
+    try {
+      sessionStorage.clear();
+      localStorage.clear();
+    } catch (e) {}
+
+    setSession(null);
+    setUser(null);
+    setProfile(null);
+    setRole(null);
+
+    return data;
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -263,6 +307,7 @@ export function AuthProvider({ children }) {
         signUp,
         signIn,
         signOut,
+        deleteAccount,
         resetPassword,
         requestPasswordReset,
         updateUserPassword,
