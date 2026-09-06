@@ -3769,6 +3769,7 @@ function AdminDashboard({ setMobileOpen }) {
   const [orgEngagementScore, setOrgEngagementScore] = useState(null);
   const [totalOrgCheckins, setTotalOrgCheckins] = useState(null);
   const [sentimentDistribution, setSentimentDistribution] = useState(null);
+  const [engagementTrendData, setEngagementTrendData] = useState([]);
 
   const loadDashboardData = useCallback(async () => {
     if (!supabase || !activeOrganizationId) return;
@@ -3832,7 +3833,7 @@ function AdminDashboard({ setMobileOpen }) {
         }
       }
 
-      // 2. Fetch real-time team comparison, org score, and sentiment breakdown
+      // 2. Fetch real-time team comparison, org score, sentiment breakdown, and weekly engagement trend
       const { data, error } = await supabase.rpc("get_org_team_comparison", {
         p_org_id: activeOrganizationId,
       });
@@ -3849,6 +3850,23 @@ function AdminDashboard({ setMobileOpen }) {
           setSentimentDistribution(data.sentiment_split);
         } else {
           setSentimentDistribution([]);
+        }
+        if (Array.isArray(data.engagement_trend) && data.engagement_trend.length > 0) {
+          setEngagementTrendData(data.engagement_trend);
+        }
+      }
+
+      // Fallback: Standalone get_org_engagement_trend RPC
+      if (!data || !Array.isArray(data.engagement_trend) || data.engagement_trend.length === 0) {
+        try {
+          const { data: trendData, error: trendErr } = await supabase.rpc("get_org_engagement_trend", {
+            p_org_id: activeOrganizationId,
+          });
+          if (!trendErr && Array.isArray(trendData) && trendData.length > 0) {
+            setEngagementTrendData(trendData);
+          }
+        } catch (trendFetchErr) {
+          console.warn("[Engagement Trend Fallback]", trendFetchErr);
         }
       }
     } catch (err) {
@@ -4015,20 +4033,51 @@ function AdminDashboard({ setMobileOpen }) {
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-6">
         <Card>
           <div className="flex items-center justify-between mb-4">
-            <p className="text-base font-semibold" style={{ color: T.text }}>Organization engagement</p>
-            <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: T.bg, color: T.muted }}>
-              Weekly trend
+            <div>
+              <p className="text-base font-semibold" style={{ color: T.text }}>Organization engagement</p>
+              <p className="text-xs mt-0.5" style={{ color: T.muted }}>
+                Weekly trend &bull; Live score {orgEngagementScore !== null ? `${orgEngagementScore}%` : (engagementTrendData.length > 0 ? `${engagementTrendData[engagementTrendData.length - 1]?.score}%` : "—")}
+              </p>
+            </div>
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/60 shadow-xs">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live Realtime
             </span>
           </div>
-          <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={engagementTrend} margin={{ left: -20 }}>
-              <CartesianGrid vertical={false} stroke={T.border} />
-              <XAxis dataKey="week" tick={{ fontSize: 12, fill: T.muted }} axisLine={false} tickLine={false} />
-              <YAxis domain={[0, 100]} tick={{ fontSize: 12, fill: T.muted }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={{ borderRadius: 12, border: `1px solid ${T.border}`, fontSize: 13 }} />
-              <Line type="monotone" dataKey="score" stroke={T.primary} strokeWidth={2.5} dot={{ r: 3 }} />
-            </LineChart>
-          </ResponsiveContainer>
+          {loadingTeams && engagementTrendData.length === 0 ? (
+            <div className="h-[200px] flex items-center justify-center text-sm" style={{ color: T.muted }}>
+              <div className="animate-spin w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full mr-2.5" />
+              Syncing live engagement trend...
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart data={engagementTrendData.length > 0 ? engagementTrendData : engagementTrend} margin={{ left: -20, right: 10 }}>
+                <CartesianGrid vertical={false} stroke={T.border} strokeDasharray="3 3" />
+                <XAxis dataKey="week" tick={{ fontSize: 12, fill: T.muted }} axisLine={false} tickLine={false} />
+                <YAxis domain={[0, 100]} tick={{ fontSize: 12, fill: T.muted }} axisLine={false} tickLine={false} />
+                <Tooltip
+                  contentStyle={{
+                    borderRadius: 12,
+                    border: `1px solid ${T.border}`,
+                    fontSize: 13,
+                    backgroundColor: "#ffffff",
+                    boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+                  }}
+                  formatter={(value, name, item) => [
+                    `${value}% (${item?.payload?.count ?? 0} check-in${item?.payload?.count === 1 ? "" : "s"})`,
+                    item?.payload?.week_date ? `Score (${item.payload.week_date})` : "Engagement Score",
+                  ]}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="score"
+                  stroke={T.primary}
+                  strokeWidth={2.5}
+                  dot={{ r: 4, fill: T.primary, strokeWidth: 2, stroke: "#ffffff" }}
+                  activeDot={{ r: 6, fill: T.primary }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
         </Card>
         <Card>
           <div className="flex items-center justify-between mb-3">
