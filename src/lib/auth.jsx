@@ -260,20 +260,44 @@ export function AuthProvider({ children }) {
       throw new Error("No active session found. Please sign in again.");
     }
 
-    // 1. Invoke delete-account Edge Function
-    const { data, error } = await supabase.functions.invoke("delete-account", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${activeToken}`,
-      },
-    });
+    let edgeSuccess = false;
+    let edgeErrorMsg = null;
 
-    if (error) {
-      console.error("[deleteAccount error]:", error);
-      throw new Error(error.message || "Failed to delete account. Please try again.");
+    // 1. Invoke delete-account Edge Function (handles email dispatch + account purge)
+    try {
+      const { data, error } = await supabase.functions.invoke("delete-account", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${activeToken}`,
+        },
+      });
+
+      if (!error && data) {
+        edgeSuccess = true;
+      } else if (error) {
+        edgeErrorMsg = error.message;
+        try {
+          if (error.context && typeof error.context.json === "function") {
+            const errJson = await error.context.json();
+            if (errJson?.error) edgeErrorMsg = errJson.error;
+          }
+        } catch (_) {}
+      }
+    } catch (invokeErr) {
+      edgeErrorMsg = invokeErr?.message;
     }
 
-    // 2. Perform clean local logout & storage purge
+    // 2. Direct security-definer PostgreSQL RPC fallback if Edge Function is unavailable
+    if (!edgeSuccess) {
+      console.warn("[deleteAccount] Edge function invocation issue, activating security-definer RPC fallback:", edgeErrorMsg);
+      const { data: rpcData, error: rpcErr } = await supabase.rpc("delete_my_account");
+      if (rpcErr) {
+        console.error("[deleteAccount RPC fallback error]:", rpcErr);
+        throw new Error(rpcErr.message || edgeErrorMsg || "Failed to delete account. Please try again.");
+      }
+    }
+
+    // 3. Perform clean local logout & storage purge
     try {
       await supabase.auth.signOut();
     } catch (e) {
@@ -290,7 +314,7 @@ export function AuthProvider({ children }) {
     setProfile(null);
     setRole(null);
 
-    return data;
+    return { success: true };
   };
 
   return (

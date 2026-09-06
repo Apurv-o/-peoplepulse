@@ -88,12 +88,49 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 4. Delete user's memberships and related records
+    // 4. Anonymize user checkins and clean up references before profile deletion
+    try {
+      await adminClient
+        .from("checkins")
+        .update({ is_anonymous: true, user_id: null })
+        .eq("user_id", userId);
+    } catch (chkErr) {
+      console.warn("[delete-account] checkins anonymization warning:", chkErr);
+    }
+
+    try {
+      await adminClient
+        .from("teams")
+        .update({ manager_id: null })
+        .eq("manager_id", userId);
+    } catch (tmErr) {
+      console.warn("[delete-account] teams manager_id null warning:", tmErr);
+    }
+
+    try {
+      await adminClient
+        .from("profiles")
+        .update({ manager_id: null })
+        .eq("manager_id", userId);
+    } catch (pfErr) {
+      console.warn("[delete-account] profiles manager_id null warning:", pfErr);
+    }
+
+    try {
+      await adminClient
+        .from("invitations")
+        .delete()
+        .eq("invited_by", userId);
+    } catch (invErr) {
+      console.warn("[delete-account] invitations delete warning:", invErr);
+    }
+
+    // 5. Delete user's memberships and profile
     await adminClient.from("organization_members").delete().eq("user_id", userId);
     await adminClient.from("team_members").delete().eq("user_id", userId);
     await adminClient.from("profiles").delete().eq("id", userId);
 
-    // 5. Delete from auth.users (permanently removes auth credentials, sessions, and tokens)
+    // 6. Delete from auth.users (permanently removes auth credentials, sessions, and tokens)
     const { error: deleteAuthError } = await adminClient.auth.admin.deleteUser(userId);
     if (deleteAuthError) {
       console.error("[delete-account] Error deleting auth user:", deleteAuthError);
