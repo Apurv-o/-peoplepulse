@@ -192,10 +192,44 @@ export function AuthProvider({ children }) {
     if (!newPassword || newPassword.length < 6) {
       throw new Error("Password must be at least 6 characters long.");
     }
+
+    // Ensure session is active before updating password
+    const { data: sessionData } = await supabase.auth.getSession();
+    let activeSession = sessionData?.session;
+
+    // Fallback: If session was not initialized yet, try to recover it from URL hash
+    if (!activeSession && typeof window !== "undefined") {
+      const hash = window.location.hash || "";
+      if (hash.includes("access_token=")) {
+        const idx = hash.indexOf("access_token=");
+        const params = new URLSearchParams(hash.substring(idx));
+        const accessToken = params.get("access_token");
+        const refreshToken = params.get("refresh_token") || "";
+        if (accessToken) {
+          try {
+            const { data: setRes, error: setErr } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            });
+            if (!setErr && setRes?.session) {
+              activeSession = setRes.session;
+            }
+          } catch (e) {
+            console.warn("[updateUserPassword] setSession fallback notice:", e);
+          }
+        }
+      }
+    }
+
     const { data, error } = await supabase.auth.updateUser({
       password: newPassword,
     });
-    if (error) throw error;
+    if (error) {
+      if (error.message?.toLowerCase().includes("auth session missing")) {
+        throw new Error("Your reset session has expired or is invalid. Please request a new password reset link.");
+      }
+      throw error;
+    }
     try { sessionStorage.removeItem("peoplepulse_password_recovery"); } catch (e) {}
     setIsPasswordRecovery(false);
     return data;

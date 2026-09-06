@@ -1645,7 +1645,11 @@ export function ResetPasswordView({ onPasswordResetSuccess, onCancel }) {
       }
     } catch (err) {
       console.error("[ResetPasswordView error]:", err);
-      setError(err.message || "Failed to update password. Your reset link may have expired.");
+      let errMsg = err.message || "Failed to update password. Your reset link may have expired.";
+      if (errMsg.toLowerCase().includes("auth session missing")) {
+        errMsg = "Your reset session has expired or is invalid. Please request a new password reset link.";
+      }
+      setError(errMsg);
     } finally {
       setLoading(false);
     }
