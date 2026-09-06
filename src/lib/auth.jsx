@@ -156,24 +156,7 @@ export function AuthProvider({ children }) {
   };
 
   const requestPasswordReset = async (email) => {
-    if (!isSupabaseConfigured || !supabase) {
-      throw new Error("Supabase is not configured yet with valid credentials.");
-    }
-    const cleanEmail = email.trim().toLowerCase();
-    const { data, error } = await supabase.rpc("request_password_reset", {
-      p_email: cleanEmail,
-    });
-    if (error) throw error;
-
-    const redirectUrl = typeof window !== "undefined"
-      ? `${window.location.origin}/#reset-password`
-      : undefined;
-
-    supabase.auth.resetPasswordForEmail(cleanEmail, {
-      redirectTo: redirectUrl,
-    }).catch(() => {});
-
-    return data;
+    return resetPassword(email);
   };
 
   const updateUserPassword = async (newPassword) => {

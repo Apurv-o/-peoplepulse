@@ -601,21 +601,25 @@ export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoT
     setForgotError(null);
     setForgotSuccess(null);
     if (!forgotEmail.trim()) {
-      setForgotError("Please enter your email address.");
+      setForgotError("Please enter your work email address.");
       return;
     }
     setForgotLoading(true);
     try {
-      const res = await requestPasswordReset(forgotEmail);
-      if (res?.code) {
-        setGeneratedCode(res.code);
-        setResetCode(res.code);
-      }
-      setResetStep(2);
-      setForgotSuccess("A 6-digit verification code has been generated. Enter your new password below.");
+      await resetPassword(forgotEmail.trim());
+      setForgotSuccess("If an account exists for this email, we've sent a password reset link. Please check your inbox and click the link to reset your password.");
     } catch (err) {
       console.error("[Password Reset Request Error]", err);
-      setForgotError(err.message || "Failed to generate password reset code. Please check your email.");
+      // Specific error classification
+      const msg = err.message || "";
+      if (msg.toLowerCase().includes("rate limit") || msg.toLowerCase().includes("too many requests")) {
+        setForgotError("Email rate limit exceeded. Please wait a few minutes before requesting another reset link.");
+      } else if (msg.toLowerCase().includes("network") || msg.toLowerCase().includes("fetch")) {
+        setForgotError("Network connection error. Please check your connection and try again.");
+      } else {
+        // Generic response to avoid account enumeration
+        setForgotSuccess("If an account exists for this email, we've sent a password reset link. Please check your inbox and click the link to reset your password.");
+      }
     } finally {
       setForgotLoading(false);
     }
@@ -930,25 +934,54 @@ export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoT
               <div>
                 <h3 className="text-lg font-bold text-[#1F2A28]">Reset Password</h3>
                 <p className="text-xs text-gray-500">
-                  {resetStep === 1 ? "Request a verification code" : "Set your new password"}
+                  {forgotSuccess ? "Check your email for the reset link" : "Enter your email to receive a password reset link"}
                 </p>
               </div>
             </div>
 
             {forgotError && (
-              <div className="mb-4 p-3 rounded-xl text-xs bg-red-50 border border-red-200 text-red-700 leading-relaxed flex items-start gap-2">
-                <AlertCircle size={14} className="shrink-0 mt-0.5" />
+              <div className="mb-4 p-3.5 rounded-xl text-xs bg-red-50 border border-red-200 text-red-700 leading-relaxed flex items-start gap-2">
+                <AlertCircle size={15} className="shrink-0 mt-0.5" />
                 <span>{forgotError}</span>
               </div>
             )}
 
-            {forgotSuccess && (
-              <div className="mb-4 p-3 rounded-xl text-xs bg-green-50 border border-green-200 text-green-700 leading-relaxed">
-                {forgotSuccess}
-              </div>
-            )}
+            {forgotSuccess ? (
+              <div className="space-y-4">
+                <div className="p-4 rounded-xl text-xs bg-emerald-50 border border-emerald-200 text-emerald-800 leading-relaxed flex items-start gap-2.5">
+                  <Check size={16} className="shrink-0 text-emerald-600 mt-0.5" />
+                  <div>
+                    <p className="font-semibold text-emerald-900 mb-1">Reset Link Dispatched</p>
+                    <p>{forgotSuccess}</p>
+                  </div>
+                </div>
 
-            {resetStep === 1 ? (
+                <p className="text-xs text-gray-500 leading-relaxed">
+                  Click the link inside the email to securely choose your new password. If you don't see it, check your spam or junk folder.
+                </p>
+
+                <div className="flex items-center gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForgotSuccess(null);
+                      setForgotError(null);
+                    }}
+                    className="flex-1 py-2.5 rounded-xl text-xs font-semibold border border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
+                  >
+                    Resend to another email
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowForgotModal(false)}
+                    className="flex-1 py-2.5 rounded-xl text-xs font-semibold text-white transition-all hover:shadow-md cursor-pointer"
+                    style={{ background: T.primary }}
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            ) : (
               <form onSubmit={handleRequestCode} className="space-y-4">
                 <div>
                   <label className="text-xs font-semibold block mb-1.5 text-gray-700">Work Email</label>
@@ -960,6 +993,9 @@ export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoT
                     required
                     className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 text-sm outline-none focus:ring-2 focus:ring-blue-200 bg-white transition-all"
                   />
+                  <p className="text-[11px] text-gray-400 mt-1">
+                    We will send a secure password reset link to this address.
+                  </p>
                 </div>
 
                 <div className="flex items-center gap-2 pt-2">
@@ -979,106 +1015,10 @@ export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoT
                     {forgotLoading ? (
                       <>
                         <RotateCw size={13} className="animate-spin" />
-                        <span>Sending...</span>
+                        <span>Sending Link...</span>
                       </>
                     ) : (
-                      <span>Send Reset Code &rarr;</span>
-                    )}
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <form onSubmit={handleVerifyAndUpdate} className="space-y-3.5">
-                {generatedCode && (
-                  <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-between">
-                    <div>
-                      <p className="text-[10px] uppercase font-bold text-blue-800 tracking-wider">Instant Verification Code</p>
-                      <p className="font-mono text-base font-bold text-[#4E6ABF] tracking-widest mt-0.5">{generatedCode}</p>
-                    </div>
-                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">Auto-filled</span>
-                  </div>
-                )}
-
-                <div>
-                  <label className="text-xs font-semibold block mb-1 text-gray-700">6-Digit Verification Code</label>
-                  <input
-                    type="text"
-                    value={resetCode}
-                    onChange={(e) => setResetCode(e.target.value.trim())}
-                    placeholder="e.g. 123456"
-                    required
-                    maxLength={6}
-                    className="w-full px-3.5 py-2 rounded-xl border border-gray-200 text-sm font-mono tracking-widest outline-none focus:ring-2 focus:ring-blue-200 bg-white transition-all text-center font-bold"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold block mb-1 text-gray-700">New Password</label>
-                  <div className="relative">
-                    <input
-                      type={showNewPassword ? "text" : "password"}
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      placeholder="At least 6 characters"
-                      required
-                      minLength={6}
-                      className="w-full pl-3.5 pr-10 py-2 rounded-xl border border-gray-200 text-sm outline-none focus:ring-2 focus:ring-blue-200 bg-white transition-all"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowNewPassword(!showNewPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none p-1 cursor-pointer"
-                      tabIndex={-1}
-                    >
-                      {showNewPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold block mb-1 text-gray-700">Confirm New Password</label>
-                  <div className="relative">
-                    <input
-                      type={showConfirmPassword ? "text" : "password"}
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      placeholder="Re-enter new password"
-                      required
-                      minLength={6}
-                      className="w-full pl-3.5 pr-10 py-2 rounded-xl border border-gray-200 text-sm outline-none focus:ring-2 focus:ring-blue-200 bg-white transition-all"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none p-1 cursor-pointer"
-                      tabIndex={-1}
-                    >
-                      {showConfirmPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setResetStep(1)}
-                    className="py-2.5 px-3 rounded-xl text-xs font-semibold border border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
-                  >
-                    Back
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={forgotLoading}
-                    className="flex-1 py-2.5 rounded-xl text-xs font-semibold text-white transition-all hover:shadow-md disabled:opacity-50 flex items-center justify-center gap-1.5 cursor-pointer"
-                    style={{ background: T.primary }}
-                  >
-                    {forgotLoading ? (
-                      <>
-                        <RotateCw size={13} className="animate-spin" />
-                        <span>Updating Password...</span>
-                      </>
-                    ) : (
-                      <span>Update Password & Sign In &rarr;</span>
+                      <span>Send Reset Link &rarr;</span>
                     )}
                   </button>
                 </div>
