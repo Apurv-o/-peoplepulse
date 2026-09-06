@@ -4430,7 +4430,7 @@ function AdminEmployees({ setMobileOpen }) {
         });
         setGeneratedInviteLink(link);
 
-        // Attempt delivery via dedicated Resend Edge Function
+        // Attempt automated delivery via backend Edge Function (Brevo / Resend)
         const emailRes = await dispatchInviteEmailViaBackend({
           email: trimmedEmail,
           link,
@@ -4440,12 +4440,10 @@ function AdminEmployees({ setMobileOpen }) {
         });
 
         if (emailRes?.status === "sent") {
-          setEmailDispatchedNotice("Invitation email delivered directly to " + trimmedEmail + " via Resend.");
-        } else if (emailRes?.details?.statusCode === 403) {
-          // Free tier test domain restriction
-          setEmailDispatchedNotice("Resend testing domain restriction: Free test sender can only send to your account email. Use the manual buttons below or copy link to send.");
+          const providerName = emailRes?.provider === "brevo" ? "Brevo" : "Resend";
+          setEmailDispatchedNotice(`Invitation email sent automatically to ${trimmedEmail} via ${providerName}!`);
         } else {
-          setEmailDispatchedNotice("Email ready. Click below to send via Gmail, your default mail app, or copy the link.");
+          setEmailDispatchedNotice("Invitation created! You can copy the link below or send via your email client.");
         }
       }
       await loadData();

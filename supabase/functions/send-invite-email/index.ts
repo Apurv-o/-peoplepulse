@@ -1,4 +1,4 @@
-﻿import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -22,6 +22,7 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+    const brevoApiKey = Deno.env.get("BREVO_API_KEY");
     const resendApiKey = Deno.env.get("RESEND_INVITE_API_KEY");
 
     // 1. Verify caller authorization header
@@ -56,12 +57,12 @@ Deno.serve(async (req) => {
       );
     }
 
-    if (!resendApiKey) {
-      console.warn("[send-invite-email] RESEND_INVITE_API_KEY secret is not configured in Supabase.");
+    if (!brevoApiKey && !resendApiKey) {
+      console.warn("[send-invite-email] Neither BREVO_API_KEY nor RESEND_INVITE_API_KEY is configured.");
       return new Response(
         JSON.stringify({
           status: "unconfigured",
-          message: "RESEND_INVITE_API_KEY secret is not set in Supabase. Invite link generated successfully for manual sharing.",
+          message: "Email provider secret not set. Invite link generated successfully for manual sharing.",
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -117,42 +118,92 @@ Deno.serve(async (req) => {
 </html>
     `;
 
-    // 3. Dispatch via Resend API using 2nd Resend key
-    const senderEmail = Deno.env.get("RESEND_INVITE_SENDER") || "onboarding@resend.dev";
+    // 3. Dispatch via Brevo API (primary, no domain restrictions) or fallback to Resend
+    let emailSent = false;
+    let lastError: any = null;
 
-    const resendResponse = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${resendApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: `PeoplePulse <${senderEmail}>`,
-        to: [email],
-        subject: `You're invited to join ${organizationName} on PeoplePulse`,
-        html: htmlContent,
-      }),
-    });
+    if (brevoApiKey) {
+      try {
+        const senderEmail = Deno.env.get("BREVO_SENDER_EMAIL") || "cyberworld898@gmail.com";
+        const brevoRes = await fetch("https://api.brevo.com/v3/smtp/email", {
+          method: "POST",
+          headers: {
+            "api-key": brevoApiKey.trim(),
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+          },
+          body: JSON.stringify({
+            sender: { name: "PeoplePulse", email: senderEmail },
+            to: [{ email: email }],
+            subject: `You're invited to join ${organizationName} on PeoplePulse`,
+            htmlContent: htmlContent,
+          }),
+        });
 
-    const resendData = await resendResponse.json();
+        const brevoData = await brevoRes.json();
+        if (brevoRes.ok) {
+          console.log("[send-invite-email] Delivered successfully via Brevo API:", brevoData);
+          return new Response(
+            JSON.stringify({
+              status: "sent",
+              message: "Invitation email delivered directly via Brevo.",
+              provider: "brevo",
+              id: brevoData.messageId,
+            }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        } else {
+          console.warn("[send-invite-email] Brevo error:", brevoData);
+          lastError = brevoData;
+        }
+      } catch (brevoErr) {
+        console.warn("[send-invite-email] Brevo exception:", (brevoErr as Error).message);
+        lastError = (brevoErr as Error).message;
+      }
+    }
 
-    if (!resendResponse.ok) {
-      console.warn("[send-invite-email] Resend API error:", resendData);
-      return new Response(
-        JSON.stringify({
-          status: "delivery_warning",
-          message: resendData.message || "Failed to deliver email via Resend.",
-          details: resendData,
-        }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    // Fallback: Resend API
+    if (!emailSent && resendApiKey) {
+      try {
+        const senderEmail = Deno.env.get("RESEND_INVITE_SENDER") || "onboarding@resend.dev";
+        const resendRes = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${resendApiKey.trim()}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            from: `PeoplePulse <${senderEmail}>`,
+            to: [email],
+            subject: `You're invited to join ${organizationName} on PeoplePulse`,
+            html: htmlContent,
+          }),
+        });
+
+        const resendData = await resendRes.json();
+        if (resendRes.ok) {
+          return new Response(
+            JSON.stringify({
+              status: "sent",
+              message: "Invitation email delivered successfully via Resend.",
+              provider: "resend",
+              id: resendData.id,
+            }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        } else {
+          lastError = resendData;
+        }
+      } catch (resendErr) {
+        lastError = (resendErr as Error).message;
+      }
     }
 
     return new Response(
       JSON.stringify({
-        status: "sent",
-        message: "Invitation email delivered successfully via Resend.",
-        id: resendData.id,
+        status: "delivery_warning",
+        message: "Failed to deliver email via automated providers.",
+        details: lastError,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
