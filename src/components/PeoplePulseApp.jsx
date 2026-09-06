@@ -4647,57 +4647,18 @@ function AdminEmployees({ setMobileOpen }) {
                 </div>
 
                 {emailDispatchedNotice && (
-                  <div className="p-2.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 text-xs flex items-center gap-2">
-                    <Mail size={14} className="text-blue-600 shrink-0" />
-                    <span className="font-medium text-[11px]">{emailDispatchedNotice}</span>
+                  <div className="p-3.5 rounded-xl bg-blue-50/90 border border-blue-200 text-blue-900 text-xs flex items-center gap-2.5">
+                    <Mail size={16} className="text-blue-600 shrink-0" />
+                    <span className="font-semibold text-xs leading-relaxed">{emailDispatchedNotice}</span>
                   </div>
                 )}
 
-                {/* Email Dispatch Buttons */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold text-gray-700">Dispatch Invitation Email:</label>
-                    <span className="text-[10px] text-gray-400">Pre-composed with instructions</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        triggerGmailWeb({
-                          email: inviteEmail.trim(),
-                          link: generatedInviteLink,
-                          role: inviteRole,
-                          orgName: activeOrganization?.name,
-                        })
-                      }
-                      className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl border border-red-200 bg-red-50/60 hover:bg-red-50 text-red-700 text-xs font-semibold transition-all hover:shadow-sm cursor-pointer"
-                    >
-                      <Mail size={13} className="shrink-0 text-red-600" />
-                      <span>Open in Gmail</span>
-                      <ExternalLink size={11} className="opacity-60 shrink-0" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        triggerEmailApp({
-                          email: inviteEmail.trim(),
-                          link: generatedInviteLink,
-                          role: inviteRole,
-                          orgName: activeOrganization?.name,
-                        })
-                      }
-                      className="flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl border border-blue-200 bg-blue-50/60 hover:bg-blue-50 text-blue-700 text-xs font-semibold transition-all hover:shadow-sm cursor-pointer"
-                    >
-                      <Send size={13} className="shrink-0 text-blue-600" />
-                      <span>Default Mail App</span>
-                      <ExternalLink size={11} className="opacity-60 shrink-0" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Direct Link & Copy actions */}
+                {/* Direct Link & Copy */}
                 <div className="space-y-2 pt-1">
-                  <label className="text-xs font-semibold text-gray-700 block">Copy Options:</label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-gray-700">Invitation Link</label>
+                    <span className="text-[10px] text-gray-400">Shareable backup link</span>
+                  </div>
                   <div className="flex items-center gap-2 p-2 rounded-xl border bg-gray-50" style={{ borderColor: T.border }}>
                     <input
                       type="text"
@@ -4708,43 +4669,20 @@ function AdminEmployees({ setMobileOpen }) {
                     <button
                       type="button"
                       onClick={handleCopyLinkOnly}
-                      className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-white shrink-0 flex items-center gap-1 transition-all cursor-pointer"
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white shrink-0 flex items-center gap-1.5 transition-all shadow-sm cursor-pointer"
                       style={{ background: T.primary }}
                     >
                       {copiedLink ? <Check size={13} /> : <Copy size={13} />}
-                      {copiedLink ? "Copied" : "Copy Link"}
-                    </button>
-                  </div>
-
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={handleCopyEmailText}
-                      className="flex-1 py-2 px-3 rounded-xl border text-xs font-semibold text-gray-700 hover:bg-gray-50 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                      style={{ borderColor: T.border }}
-                    >
-                      {copiedEmailText ? <Check size={13} className="text-emerald-600" /> : <Copy size={13} />}
-                      {copiedEmailText ? "Copied Full Message!" : "Copy Full Email Invitation"}
+                      {copiedLink ? "Copied!" : "Copy Link"}
                     </button>
                   </div>
                 </div>
 
-                {/* Message preview toggle */}
-                <details className="text-xs text-gray-500 group border rounded-xl p-2.5 bg-gray-50/50" style={{ borderColor: T.border }}>
-                  <summary className="cursor-pointer font-medium hover:text-gray-800 select-none flex items-center justify-between text-[11px]">
-                    <span>Preview email invitation message</span>
-                    <ChevronDown size={12} className="transition-transform group-open:rotate-180 text-gray-400" />
-                  </summary>
-                  <div className="mt-2 pt-2 border-t text-[11px] text-gray-600 whitespace-pre-wrap leading-relaxed font-mono bg-white p-2.5 rounded-lg border" style={{ borderColor: T.border }}>
-                    {`Subject: You're invited to join ${activeOrganization?.name || "our organization"} on PeoplePulse\n\nHi there,\n\nYou have been invited to join ${activeOrganization?.name || "our organization"} on PeoplePulse as a ${inviteRole.charAt(0).toUpperCase() + inviteRole.slice(1)}.\n\nClick the link below to accept your invitation and set up your account:\n${generatedInviteLink}\n\nNote: This single-use invitation link is secure and valid for 7 days.`}
-                  </div>
-                </details>
-
                 <button
                   type="button"
                   onClick={() => setShowInviteModal(false)}
-                  className="w-full py-2.5 rounded-xl text-sm font-semibold border text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
-                  style={{ borderColor: T.border }}
+                  className="w-full mt-2 py-2.5 rounded-xl text-sm font-semibold text-white transition-all shadow-sm hover:opacity-95 cursor-pointer"
+                  style={{ background: T.primary }}
                 >
                   Done
                 </button>
