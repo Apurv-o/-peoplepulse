@@ -99,9 +99,19 @@ function AppContent() {
   };
 
   // If user is authenticated: redirect from login/signup/homepage to app or onboarding
+  // If user is unauthenticated: strictly guard protected app and onboarding routes
   useEffect(() => {
     // If the user is currently in password recovery from an email link, DO NOT redirect away!
     if (currentScreen === "reset-password" || isRecoveryUrl() || isPasswordRecovery) {
+      return;
+    }
+
+    // Unauthenticated route guard: if user is not logged in and not in demo mode, protect app & onboarding
+    if (!authLoading && !user && !isDemoMode) {
+      if (currentScreen === "app" || currentScreen === "onboarding") {
+        setCurrentScreen("login");
+        syncHashToScreen("login");
+      }
       return;
     }
 
@@ -142,7 +152,7 @@ function AppContent() {
         syncHashToScreen("app");
       }
     }
-  }, [user, authLoading, orgLoading, organizations.length, currentScreen, isPasswordRecovery]);
+  }, [user, authLoading, orgLoading, organizations.length, currentScreen, isPasswordRecovery, isDemoMode]);
 
   // Handle URL hash changes (back/forward navigation or direct links)
   useEffect(() => {
@@ -161,7 +171,10 @@ function AppContent() {
         }
         setCurrentScreen("invite");
       } else if (hash === "#onboarding") {
-        if (organizationsRef.current && organizationsRef.current.length > 0) {
+        if (!userRef.current && !isDemoModeRef.current) {
+          setCurrentScreen("login");
+          syncHashToScreen("login");
+        } else if (organizationsRef.current && organizationsRef.current.length > 0) {
           setCurrentScreen("app");
           syncHashToScreen("app");
         } else {
@@ -182,7 +195,12 @@ function AppContent() {
           setCurrentScreen("login");
         }
       } else if (hash === "#app" || hash === "#employee-checkin") {
-        setCurrentScreen("app");
+        if (!userRef.current && !isDemoModeRef.current) {
+          setCurrentScreen("login");
+          syncHashToScreen("login");
+        } else {
+          setCurrentScreen("app");
+        }
       } else {
         setCurrentScreen("homepage");
       }
@@ -298,6 +316,19 @@ function AppContent() {
 
   // 4. Main Application View
   if (currentScreen === "app") {
+    // If not authenticated and not in demo mode, redirect / render login
+    if (!user && !isDemoMode && !authLoading) {
+      return (
+        <LoginView
+          initialMode="login"
+          onSignIn={(role, meta) => navigateTo("app", role, meta)}
+          onReturnHome={() => navigateTo("homepage")}
+          onGoToSignup={() => navigateTo("signup")}
+          onGoToLogin={() => navigateTo("login")}
+        />
+      );
+    }
+
     const effectiveRole = isDemoMode ? demoRole : (activeRole || serverRole || "employee");
 
     return (

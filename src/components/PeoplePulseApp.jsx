@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
+import AgenticCopilot from "./AgenticCopilot";
 import { useAuth } from "../lib/auth";
 import { useOrganization } from "../lib/organization";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
@@ -13,7 +14,7 @@ import {
   Home, MessageSquare, TrendingUp, Users, UserPlus, Layers, ListChecks, UploadCloud,
   Settings, Bell, ChevronDown, Lock, ArrowRight, Search, Menu, X, Sparkles,
   ArrowUp, ArrowDown, ShieldCheck, Check, LogOut, ArrowLeft, Copy, Building2, Plus, AlertCircle,
-  RotateCw, Trash2, Link2, Send, Eye, EyeOff, Mail, ExternalLink, UserX, AlertTriangle
+  RotateCw, Trash2, Link2, Send, Eye, EyeOff, Mail, ExternalLink, UserX, AlertTriangle, FileText, Download
 } from "lucide-react";
 
 
@@ -460,6 +461,7 @@ function Sidebar({ role, setRole, view, setView, mobileOpen, setMobileOpen, onRe
               onClick={onSignOut}
               className="p-1.5 rounded-lg hover:bg-white text-gray-400 hover:text-red-600 transition-colors shrink-0"
               title="Sign Out"
+              aria-label="Sign Out"
             >
               <LogOut size={15} />
             </button>
@@ -3978,6 +3980,38 @@ function AdminDashboard({ setMobileOpen }) {
           goodDirection="up"
         />
       </div>
+
+      {/* PulseAgent Autonomous Activity Widget */}
+      <div className="mb-6">
+        <Card>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#4E6ABF] to-[#6A8BE8] flex items-center justify-center text-white shrink-0 shadow-xs">
+                <Sparkles size={18} />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-bold" style={{ color: T.text }}>PulseAgent Autonomous Operations</p>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    Live Autonomous Loop
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Autonomous HR operations engine monitoring burnout signals, team friction, and dynamic survey follow-ups.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new CustomEvent("peoplepulse_open_copilot"))}
+              className="text-xs font-semibold px-4 py-2 rounded-xl bg-[#4E6ABF] text-white hover:bg-[#344A91] transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer shrink-0"
+            >
+              <Sparkles size={14} /> Open PulseAgent
+            </button>
+          </div>
+        </Card>
+      </div>
+
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-6">
         <Card>
           <div className="flex items-center justify-between mb-4">
@@ -5378,21 +5412,26 @@ function AdminQuestions({ setMobileOpen }) {
 
       if (qErr) throw qErr;
 
-      // If organization has custom questions, display org questions
+      // Seamlessly merge org-specific questions with base defaults so core dimensions are never hidden
       const orgQuestions = (data || []).filter((q) => q.organization_id === activeOrganizationId);
-      if (orgQuestions.length > 0) {
-        setQuestions(orgQuestions);
-      } else if (data && data.length > 0) {
-        setQuestions(data);
-      } else {
-        setQuestions(CHECKIN_DIMENSIONS.map((d, i) => ({
-          id: `default-${i}`,
-          label: d.label,
-          type: "rating",
-          is_active: true,
-          organization_id: null,
-        })));
-      }
+      const dbDefaults = (data || []).filter((q) => !q.organization_id);
+
+      const baseDefaults = dbDefaults.length > 0
+        ? dbDefaults
+        : CHECKIN_DIMENSIONS.map((d, i) => ({
+            id: `default-${i}`,
+            label: d.label,
+            type: "rating",
+            is_active: true,
+            organization_id: null,
+          }));
+
+      const orgQuestionLabels = new Set(orgQuestions.map((q) => q.label.toLowerCase().trim()));
+      const mergedQuestions = [
+        ...orgQuestions,
+        ...baseDefaults.filter((d) => !orgQuestionLabels.has(d.label.toLowerCase().trim())),
+      ];
+      setQuestions(mergedQuestions);
     } catch (err) {
       console.error("[AdminQuestions] Error loading questions:", err);
       setError("Failed to load questions.");
@@ -5403,7 +5442,33 @@ function AdminQuestions({ setMobileOpen }) {
 
   useEffect(() => {
     loadQuestions();
-  }, [loadQuestions]);
+
+    if (!supabase || !activeOrganizationId) return;
+
+    const channel = supabase
+      .channel(`admin-questions-live-${activeOrganizationId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "survey_questions",
+          filter: `organization_id=eq.${activeOrganizationId}`,
+        },
+        () => {
+          loadQuestions();
+        }
+      )
+      .subscribe();
+
+    const handleAgentQuestion = () => loadQuestions();
+    window.addEventListener("peoplepulse_agent_activity_update", handleAgentQuestion);
+
+    return () => {
+      supabase.removeChannel(channel);
+      window.removeEventListener("peoplepulse_agent_activity_update", handleAgentQuestion);
+    };
+  }, [activeOrganizationId, loadQuestions]);
 
   const handleOpenAdd = () => {
     setModalMode("add");
@@ -5695,14 +5760,361 @@ function AdminQuestions({ setMobileOpen }) {
 }
 
 function AdminImports({ setMobileOpen }) {
-  const rows = [
+  const { activeOrganizationId, activeOrganization, sendInvitation } = useOrganization();
+  const [historyRows, setHistoryRows] = useState([
     { source: "Slack", status: "Synced", date: "Sep 3, 2026", records: 214 },
     { source: "Google Forms", status: "Synced", date: "Aug 27, 2026", records: 198 },
-  ];
+  ]);
+  const [file, setFile] = useState(null);
+  const [parsedRows, setParsedRows] = useState([]);
+  const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState(null);
+  const [importNotice, setImportNotice] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const downloadTemplate = () => {
+    const csvContent =
+      "Full Name,Email,Department,Team,Role,Job Title\n" +
+      "Liam Cooper,liam.cooper@company.com,Engineering,Engineering Team,employee,Senior Engineer\n" +
+      "Sarah Patel,sarah.patel@company.com,Product,Product Team,manager,Lead Product Manager\n" +
+      "Alex Morgan,alex.morgan@company.com,Operations,Operations Team,employee,Operations Lead\n";
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", "peoplepulse_employee_template.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const parseCSVText = (text) => {
+    const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+    if (lines.length < 2) {
+      setParsedRows([]);
+      setImportNotice({ type: "error", message: "The CSV file appears to be empty or missing data rows." });
+      return;
+    }
+
+    // Parse CSV line handling quotes
+    const parseLine = (line) => {
+      const entries = [];
+      let current = "";
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === '"') {
+          inQuotes = !inQuotes;
+        } else if (char === "," && !inQuotes) {
+          entries.push(current.trim().replace(/^"(.*)"$/, "$1"));
+          current = "";
+        } else {
+          current += char;
+        }
+      }
+      entries.push(current.trim().replace(/^"(.*)"$/, "$1"));
+      return entries;
+    };
+
+    const headers = parseLine(lines[0]).map((h) => h.toLowerCase().trim());
+    const emailIdx = headers.findIndex((h) => h.includes("email"));
+    const nameIdx = headers.findIndex((h) => h.includes("name") || h.includes("full name"));
+    const deptIdx = headers.findIndex((h) => h.includes("dept") || h.includes("department"));
+    const teamIdx = headers.findIndex((h) => h.includes("team"));
+    const roleIdx = headers.findIndex((h) => h.includes("role"));
+    const titleIdx = headers.findIndex((h) => h.includes("title") || h.includes("job"));
+
+    if (emailIdx === -1) {
+      setImportNotice({ type: "error", message: "Missing required 'Email' column in CSV header." });
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const rows = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const cols = parseLine(lines[i]);
+      if (cols.length === 1 && !cols[0]) continue;
+      const email = cols[emailIdx] || "";
+      const name = nameIdx !== -1 ? cols[nameIdx] : "";
+      const department = deptIdx !== -1 ? cols[deptIdx] : "";
+      const team = teamIdx !== -1 ? cols[teamIdx] : "";
+      const rawRole = roleIdx !== -1 ? (cols[roleIdx] || "").toLowerCase() : "employee";
+      const role = ["admin", "manager", "employee"].includes(rawRole) ? rawRole : "employee";
+      const jobTitle = titleIdx !== -1 ? cols[titleIdx] : "";
+
+      const isValidEmail = emailRegex.test(email.trim());
+      const isValid = isValidEmail;
+      const errorMsg = !isValidEmail ? "Invalid email address" : null;
+
+      rows.push({
+        id: i,
+        name: name || (email ? email.split("@")[0] : `Employee ${i}`),
+        email: email.trim(),
+        department,
+        team,
+        role,
+        jobTitle,
+        isValid,
+        error: errorMsg,
+      });
+    }
+
+    setParsedRows(rows);
+    setImportNotice({
+      type: "info",
+      message: `Parsed ${rows.length} records (${rows.filter((r) => r.isValid).length} valid, ${rows.filter((r) => !r.isValid).length} errors).`,
+    });
+  };
+
+  const handleFileSelect = (e) => {
+    const selectedFile = e.target.files?.[0];
+    if (!selectedFile) return;
+    setFile(selectedFile);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      parseCSVText(event.target?.result || "");
+    };
+    reader.readAsText(selectedFile);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const droppedFile = e.dataTransfer.files?.[0];
+    if (droppedFile && droppedFile.name.toLowerCase().endsWith(".csv")) {
+      setFile(droppedFile);
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        parseCSVText(event.target?.result || "");
+      };
+      reader.readAsText(droppedFile);
+    } else {
+      setImportNotice({ type: "error", message: "Please upload a valid .csv file." });
+    }
+  };
+
+  const handleExecuteImport = async () => {
+    const validRows = parsedRows.filter((r) => r.isValid);
+    if (validRows.length === 0) return;
+
+    setImporting(true);
+    setImportProgress({ current: 0, total: validRows.length });
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (let i = 0; i < validRows.length; i++) {
+      const row = validRows[i];
+      try {
+        if (sendInvitation && activeOrganizationId) {
+          await sendInvitation({
+            email: row.email,
+            role: row.role,
+            teamId: null,
+          });
+        }
+        successCount++;
+      } catch (err) {
+        // Continue with remaining rows if duplicate or already invited
+        failCount++;
+      }
+      setImportProgress({ current: i + 1, total: validRows.length });
+    }
+
+    // Add entry to history table
+    const now = new Date();
+    const dateStr = now.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    setHistoryRows((prev) => [
+      {
+        source: `CSV Roster (${file?.name || "employees.csv"})`,
+        status: "Synced",
+        date: dateStr,
+        records: successCount || validRows.length,
+      },
+      ...prev,
+    ]);
+
+    setImporting(false);
+    setImportNotice({
+      type: "success",
+      message: `Bulk import completed! ${successCount || validRows.length} members processed successfully.`,
+    });
+    setFile(null);
+    setParsedRows([]);
+  };
+
+  const validCount = parsedRows.filter((r) => r.isValid).length;
+  const errorCount = parsedRows.filter((r) => !r.isValid).length;
+
   return (
     <div>
-      <Topbar title="Import history" subtitle="Data sources feeding PeoplePulse." setMobileOpen={setMobileOpen} />
+      <Topbar
+        title="Data & Imports"
+        subtitle="Upload employee CSV rosters, configure integrations, and review historical sync logs."
+        setMobileOpen={setMobileOpen}
+        right={
+          <button
+            onClick={downloadTemplate}
+            className="text-xs font-semibold px-3 py-2 rounded-xl border bg-white hover:bg-gray-50 flex items-center gap-1.5 transition-colors shadow-xs"
+            style={{ borderColor: T.border, color: T.text }}
+          >
+            <Download size={14} /> Download CSV Template
+          </button>
+        }
+      />
+
+      {/* CSV Bulk Importer Card */}
+      <div className="mb-6">
+        <Card>
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <p className="text-base font-semibold" style={{ color: T.text }}>Bulk Employee Import (CSV)</p>
+              <p className="text-xs" style={{ color: T.muted }}>
+                Upload your company employee roster to invite team members and seed departments in bulk.
+              </p>
+            </div>
+            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">
+              CSV UTF-8 Supported
+            </span>
+          </div>
+
+          {/* Format Guide Tags */}
+          <div className="flex flex-wrap gap-1.5 mb-4">
+            <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-gray-100 text-gray-700">Full Name (Optional)</span>
+            <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-bold">Email (Required)</span>
+            <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-gray-100 text-gray-700">Department (Optional)</span>
+            <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-gray-100 text-gray-700">Team (Optional)</span>
+            <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-gray-100 text-gray-700">Role (employee | manager | admin)</span>
+          </div>
+
+          {/* Drag and Drop Zone */}
+          <div
+            onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={handleDrop}
+            className={`border-2 border-dashed rounded-2xl p-6 text-center transition-all cursor-pointer ${
+              isDragging ? "border-blue-500 bg-blue-50/50" : "border-gray-300 hover:border-gray-400 bg-gray-50/40"
+            }`}
+            onClick={() => document.getElementById("csv-file-input")?.click()}
+          >
+            <input
+              id="csv-file-input"
+              type="file"
+              accept=".csv"
+              className="hidden"
+              onChange={handleFileSelect}
+            />
+            <div className="w-10 h-10 mx-auto mb-2 rounded-xl bg-blue-50 text-[#4E6ABF] flex items-center justify-center">
+              <UploadCloud size={20} />
+            </div>
+            <p className="text-sm font-semibold mb-1" style={{ color: T.text }}>
+              {file ? file.name : "Click to select or drag and drop a CSV file"}
+            </p>
+            <p className="text-xs text-gray-400">
+              {file ? `${(file.size / 1024).toFixed(1)} KB ready for import` : "Supports standard .csv format with email and role headers"}
+            </p>
+          </div>
+
+          {/* Status Notice */}
+          {importNotice && (
+            <div
+              className={`mt-3 p-3 rounded-xl text-xs flex items-center gap-2 ${
+                importNotice.type === "error"
+                  ? "bg-red-50 text-red-700 border border-red-200"
+                  : importNotice.type === "success"
+                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                  : "bg-blue-50 text-blue-700 border border-blue-200"
+              }`}
+            >
+              {importNotice.type === "error" ? <AlertCircle size={15} /> : <Check size={15} />}
+              <span>{importNotice.message}</span>
+            </div>
+          )}
+
+          {/* Parsed Rows Preview */}
+          {parsedRows.length > 0 && (
+            <div className="mt-4 border rounded-xl overflow-hidden" style={{ borderColor: T.border }}>
+              <div className="px-4 py-2.5 bg-gray-50 border-b flex items-center justify-between" style={{ borderColor: T.border }}>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold" style={{ color: T.text }}>Import Preview</span>
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                    {validCount} Valid
+                  </span>
+                  {errorCount > 0 && (
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-800">
+                      {errorCount} Errors
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={handleExecuteImport}
+                  disabled={importing || validCount === 0}
+                  className="text-xs font-semibold px-4 py-1.5 rounded-lg text-white disabled:opacity-50 transition-all flex items-center gap-1.5 shadow-xs"
+                  style={{ background: T.primary }}
+                >
+                  {importing ? `Importing (${importProgress?.current}/${importProgress?.total})...` : `Import ${validCount} Members`}
+                </button>
+              </div>
+
+              {/* Progress Bar */}
+              {importing && importProgress && (
+                <div className="w-full bg-gray-100 h-1.5">
+                  <div
+                    className="h-full bg-blue-600 transition-all duration-200"
+                    style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }}
+                  />
+                </div>
+              )}
+
+              <div className="max-h-56 overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50 text-gray-500 font-medium">
+                    <tr>
+                      <th className="px-3 py-2 text-left">#</th>
+                      <th className="px-3 py-2 text-left">Name</th>
+                      <th className="px-3 py-2 text-left">Email</th>
+                      <th className="px-3 py-2 text-left">Department</th>
+                      <th className="px-3 py-2 text-left">Role</th>
+                      <th className="px-3 py-2 text-left">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {parsedRows.slice(0, 10).map((r, i) => (
+                      <tr key={r.id} className="hover:bg-gray-50/60">
+                        <td className="px-3 py-1.5 text-gray-400">{i + 1}</td>
+                        <td className="px-3 py-1.5 font-medium text-gray-800">{r.name}</td>
+                        <td className="px-3 py-1.5 text-gray-600 font-mono text-[11px]">{r.email}</td>
+                        <td className="px-3 py-1.5 text-gray-500">{r.department || "—"}</td>
+                        <td className="px-3 py-1.5 uppercase text-[10px] font-semibold text-gray-600">{r.role}</td>
+                        <td className="px-3 py-1.5">
+                          {r.isValid ? (
+                            <span className="text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded font-medium">Ready</span>
+                          ) : (
+                            <span className="text-[10px] text-red-700 bg-red-50 px-1.5 py-0.5 rounded font-medium">{r.error}</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {parsedRows.length > 10 && (
+                  <p className="p-2 text-center text-[11px] text-gray-400 bg-gray-50/50">
+                    + {parsedRows.length - 10} more rows ready for import
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+        </Card>
+      </div>
+
+      {/* Synced Data Feeds History Card */}
       <Card padded={false}>
+        <div className="px-5 py-3 border-b" style={{ borderColor: T.border }}>
+          <p className="text-sm font-semibold" style={{ color: T.text }}>Import History & Data Feeds</p>
+          <p className="text-xs" style={{ color: T.muted }}>Historical sync logs from CSV uploads and connected workplace integrations.</p>
+        </div>
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left" style={{ color: T.muted }}>
@@ -5710,14 +6122,17 @@ function AdminImports({ setMobileOpen }) {
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
-              <tr key={r.source} className="border-t" style={{ borderColor: T.border }}>
-                <td className="px-5 py-3 font-medium" style={{ color: T.text }}>{r.source}</td>
+            {historyRows.map((r, idx) => (
+              <tr key={`${r.source}-${idx}`} className="border-t" style={{ borderColor: T.border }}>
+                <td className="px-5 py-3 font-medium flex items-center gap-2" style={{ color: T.text }}>
+                  <FileText size={14} className="text-gray-400" />
+                  <span>{r.source}</span>
+                </td>
                 <td className="px-5 py-3">
                   <span className="text-xs font-medium px-2.5 py-1 rounded-full" style={{ background: T.positiveBg, color: "#3F7A5C" }}>{r.status}</span>
                 </td>
                 <td className="px-5 py-3" style={{ color: T.muted }}>{r.date}</td>
-                <td className="px-5 py-3" style={{ color: T.text }}>{r.records}</td>
+                <td className="px-5 py-3 font-semibold" style={{ color: T.text }}>{r.records}</td>
               </tr>
             ))}
           </tbody>
@@ -6009,6 +6424,13 @@ export default function PeoplePulseApp({ role = "manager", onReturnHome, onSignO
   const [currentRole, setCurrentRole] = useState(normalizedRole);
   const [view, setView] = useState(`${normalizedRole}-dashboard`);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [copilotOpen, setCopilotOpen] = useState(false);
+
+  useEffect(() => {
+    const handleOpenCopilot = () => setCopilotOpen(true);
+    window.addEventListener("peoplepulse_open_copilot", handleOpenCopilot);
+    return () => window.removeEventListener("peoplepulse_open_copilot", handleOpenCopilot);
+  }, []);
 
   useEffect(() => {
     const norm = role === "owner" ? "admin" : role;
@@ -6051,6 +6473,17 @@ export default function PeoplePulseApp({ role = "manager", onReturnHome, onSignO
           {views[view] || views[`${currentRole}-dashboard`]}
         </div>
       </main>
+
+      {/* PulseAgent Autonomous Copilot */}
+      <AgenticCopilot
+        isOpen={copilotOpen}
+        onToggle={() => setCopilotOpen(prev => !prev)}
+        onNavigate={(newView) => {
+          if (newView) {
+            setView(newView);
+          }
+        }}
+      />
     </div>
   );
 }
