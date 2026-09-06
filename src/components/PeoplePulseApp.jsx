@@ -4430,38 +4430,22 @@ function AdminEmployees({ setMobileOpen }) {
         });
         setGeneratedInviteLink(link);
 
-        if (autoSendEmail) {
-          // 1. First attempt automatic delivery via dedicated Resend Edge Function
-          const emailRes = await dispatchInviteEmailViaBackend({
-            email: trimmedEmail,
-            link,
-            role: inviteRole,
-            orgName: activeOrganization?.name,
-            teamName: teamObj?.name,
-          });
+        // Attempt delivery via dedicated Resend Edge Function
+        const emailRes = await dispatchInviteEmailViaBackend({
+          email: trimmedEmail,
+          link,
+          role: inviteRole,
+          orgName: activeOrganization?.name,
+          teamName: teamObj?.name,
+        });
 
-          if (emailRes?.status === "sent") {
-            setEmailDispatchedNotice("Invitation email delivered directly to " + trimmedEmail + " via Resend.");
-          } else {
-            // Graceful fallback to opening user's mail client if backend email failed or unconfigured
-            if (trimmedEmail.toLowerCase().endsWith("@gmail.com")) {
-              triggerGmailWeb({
-                email: trimmedEmail,
-                link,
-                role: inviteRole,
-                orgName: activeOrganization?.name,
-              });
-              setEmailDispatchedNotice("Gmail compose opened with pre-filled invitation.");
-            } else {
-              triggerEmailApp({
-                email: trimmedEmail,
-                link,
-                role: inviteRole,
-                orgName: activeOrganization?.name,
-              });
-              setEmailDispatchedNotice("Default mail app opened with pre-filled invitation.");
-            }
-          }
+        if (emailRes?.status === "sent") {
+          setEmailDispatchedNotice("Invitation email delivered directly to " + trimmedEmail + " via Resend.");
+        } else if (emailRes?.details?.statusCode === 403) {
+          // Free tier test domain restriction
+          setEmailDispatchedNotice("Resend testing domain restriction: Free test sender can only send to your account email. Use the manual buttons below or copy link to send.");
+        } else {
+          setEmailDispatchedNotice("Email ready. Click below to send via Gmail, your default mail app, or copy the link.");
         }
       }
       await loadData();
@@ -4819,24 +4803,8 @@ function AdminEmployees({ setMobileOpen }) {
                   </div>
                 </div>
 
-                {/* Auto send email toggle */}
-                <label className="flex items-start gap-2.5 p-3 rounded-xl bg-blue-50/70 border border-blue-100 text-xs text-blue-900 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={autoSendEmail}
-                    onChange={(e) => setAutoSendEmail(e.target.checked)}
-                    className="mt-0.5 rounded border-blue-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                  />
-                  <div>
-                    <span className="font-semibold block text-blue-900">Send invitation email to recipient</span>
-                    <span className="text-[11px] text-blue-700/80 leading-relaxed block">
-                      Opens your mail client (or Gmail) with a pre-formatted invitation ready to send to {inviteEmail ? <b>{inviteEmail}</b> : "the recipient"}.
-                    </span>
-                  </div>
-                </label>
-
                 <p className="text-[11px] text-gray-500">
-                  Free tier allows up to 10 seats. Invitations expire automatically after 7 days.
+                  Invitations include a 1-click joining link with pre-filled default password. Delivered via Resend.
                 </p>
 
                 <div className="flex gap-2 pt-1">
