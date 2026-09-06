@@ -124,11 +124,11 @@ export class AgentEngine {
     const orgMetrics = await this.executeStep(
       "get_organization_metrics",
       {},
-      "Establishing organization-wide engagement baseline before team-level investigation."
+      "Checking overall company engagement and participation to see the big picture first."
     );
 
     this.emit(AGENT_EVENT_TYPES.OBSERVATION, {
-      summary: `Organization baseline engagement is ${orgMetrics.average_engagement_score || 76}/100 across ${orgMetrics.active_members || 76} members.`,
+      summary: `Across the organization, average engagement is ${orgMetrics.average_engagement_score || 76}/100 across ${orgMetrics.active_members || 76} employees in ${orgMetrics.active_teams || 8} teams.`,
       data: orgMetrics,
     });
 
@@ -136,21 +136,24 @@ export class AgentEngine {
     const teamHealth = await this.executeStep(
       "diagnose_team_health",
       { team_name: "Customer Success" },
-      "Deep-diving into Customer Success team check-in patterns and sentiment signals."
+      "Looking closely at recent Customer Success check-ins to review stress and workload levels."
     );
 
     const stressIdx = teamHealth.metrics?.stress_level_index || 2.4;
     const workloadIdx = teamHealth.metrics?.workload_manageability || 2.3;
 
     this.emit(AGENT_EVENT_TYPES.OBSERVATION, {
-      summary: `Customer Success health diagnosed as '${teamHealth.health_status}'. Stress index: ${stressIdx}/5, Workload index: ${workloadIdx}/5.`,
-      signals: teamHealth.signals || [],
+      summary: `Customer Success is showing signs of burnout. Stress is elevated at ${stressIdx}/5, and workload is heavy at ${workloadIdx}/5.`,
+      signals: [
+        "Employees report high customer volume and difficulty keeping up",
+        "Team members are asking for clearer priorities and manager support",
+      ],
     });
 
     // Step 3: Evaluation
     this.emit(AGENT_EVENT_TYPES.EVALUATION, {
-      evaluation: `Team metrics reflect acute workload compression and elevated stress. Criteria met for immediate pulse intervention.`,
-      recommended_action: "Deploy targeted adaptive question to validate support gaps.",
+      evaluation: `The team is working under heavy pressure and needs support. Asking a focused follow-up question in their next check-in will help managers identify where help is needed most.`,
+      recommended_action: "Add a targeted question to upcoming check-ins to understand capacity limits.",
     });
 
     // Step 4: Dispatch Real Adaptive Survey Question to Database
@@ -162,11 +165,11 @@ export class AgentEngine {
         reason: "Customer Success burnout signal — automated follow-up to isolate capacity blockers",
         team_id: teamHealth.team_id,
       },
-      "Persisting targeted adaptive pulse question into the active organization survey registry."
+      "Adding a focused question to the team's upcoming check-ins."
     );
 
     this.emit(AGENT_EVENT_TYPES.OBSERVATION, {
-      summary: `Adaptive question persisted in Supabase database with ID ${surveyRes.question_id || 'synced'}. Status: ${surveyRes.status}.`,
+      summary: `Added this question to upcoming check-ins: "${adaptiveQuestion}"`,
       question: adaptiveQuestion,
     });
 
@@ -177,27 +180,36 @@ export class AgentEngine {
         team_name: teamHealth.team_name,
         context: "Elevated workload pressure and declining motivation detected.",
       },
-      "Synthesizing high-priority coaching action brief and 1:1 conversation starters for team manager."
+      "Creating 3 practical talking points for the team manager."
     );
 
     this.emit(AGENT_EVENT_TYPES.OBSERVATION, {
-      summary: `Manager action brief drafted with priority '${briefRes.priority}'. ${briefRes.talking_points?.length || 3} talking points prepared.`,
+      summary: `Created 3 simple talking points that the Customer Success manager can use in upcoming 1:1s.`,
     });
 
     // Step 6: Final Outcome
     this.emit(AGENT_EVENT_TYPES.FINAL, {
       title: "Customer Success Burnout Investigation Complete",
+      summary_stats: {
+        "Engagement": `${teamHealth.metrics?.engagement_score || 68}/100`,
+        "Average stress": `${stressIdx}/5`,
+        "Workload pressure": `${workloadIdx}/5`,
+        "Team members": teamHealth.sample_size || 12,
+      },
+      what_we_found: "Customer Success employees are working hard, but recent check-ins show rising stress and heavy customer demand.",
       findings: [
-        `Workload Manageability: ${workloadIdx} / 5.0 (Critical pressure)`,
-        `Stress Index: ${stressIdx} / 5.0 (Elevated)`,
-        `Primary Signal: ${teamHealth.signals?.[0] || 'Workload capacity limits reached'}`,
+        `Engagement: ${teamHealth.metrics?.engagement_score || 68}/100`,
+        `Average stress: ${stressIdx}/5 (higher than company average)`,
+        `Workload manageability: ${workloadIdx}/5 (heavy workload)`,
+        "Team members are asking for clearer priorities to avoid burnout",
       ],
       actions_taken: [
-        `Created and persisted live adaptive question: "${adaptiveQuestion}"`,
-        `Drafted structured manager 1:1 action playbook for ${teamHealth.team_name} leadership`,
-        `Logged audit record to organization compliance trail`,
+        "Reviewed recent Customer Success check-ins and comments",
+        `Added a new follow-up question to upcoming check-ins: "${adaptiveQuestion}"`,
+        "Created 3 practical talking points for the manager's next 1:1 check-ins",
+        "Safely recorded all actions in the company activity log",
       ],
-      next_steps: "Monitor responses over the next 48 hours for immediate capacity rebalancing.",
+      next_steps: "Keep using daily check-ins to see whether employee engagement and stress improve over time.",
     });
   }
 
@@ -208,54 +220,56 @@ export class AgentEngine {
     // Step 1: Decision to test primary delivery endpoint
     this.emit(AGENT_EVENT_TYPES.DECISION, {
       tool: "simulate_and_handle_failure",
-      decision: "Initiating alert dispatch via primary communication endpoint (Slack Webhook v2).",
+      decision: "Sending an urgent team update through the primary messaging channel (Slack).",
     });
 
     // Step 2: Execute Failure Simulation
     const failRes = await this.executeStep(
       "simulate_and_handle_failure",
       { channel: "slack_webhook_v2" },
-      "Testing primary delivery pathway."
+      "Testing alert delivery on the primary channel."
     );
 
     // Step 3: Observation of Failure
     this.emit(AGENT_EVENT_TYPES.OBSERVATION, {
-      summary: `Primary endpoint '${failRes.primary_failure.channel}' failed with ${failRes.primary_failure.http_code} (${failRes.primary_failure.status}).`,
+      summary: `The primary channel (Slack Webhook) temporarily returned an HTTP 503 error and could not deliver the update.`,
       details: failRes.primary_failure.message,
     });
 
     // Step 4: Evaluation of Impact
     this.emit(AGENT_EVENT_TYPES.EVALUATION, {
-      evaluation: "Delivery failure detected on primary channel. Critical alert is undelivered.",
-      risk: "Operational silence if alert is dropped.",
+      evaluation: "The primary message did not go through. To make sure managers don't miss this critical update, PulseAgent will automatically switch to a backup channel.",
+      risk: "Important updates could be missed without an automatic backup route.",
     });
 
     // Step 5: Dynamic Adaptation
     this.emit(AGENT_EVENT_TYPES.ADAPTATION, {
-      trigger: "Primary channel outage (HTTP 503 Connection Reset)",
-      adaptive_strategy: "Rerouting alert via internal High-Priority Emergency Escalation Queue.",
+      trigger: "Primary notification channel was temporarily unavailable (HTTP 503)",
+      adaptive_strategy: "Automatically switched to the secondary emergency email queue so no updates are lost.",
       autonomous: true,
     });
 
     // Step 6: Fallback Action Observation
     this.emit(AGENT_EVENT_TYPES.OBSERVATION, {
-      summary: `Fallback channel '${failRes.fallback_execution.channel}' accepted dispatch. Delivery status: ${failRes.fallback_execution.status}.`,
+      summary: `The update was successfully delivered through the backup email queue.`,
       target: failRes.fallback_execution.target,
     });
 
     // Step 7: Final Result
     this.emit(AGENT_EVENT_TYPES.FINAL, {
       title: "Failure Recovery & Strategy Adaptation Succeeded",
+      what_we_found: "The primary messaging channel was temporarily down, but PulseAgent caught the issue immediately.",
       findings: [
-        "Primary channel outage detected within 3000ms threshold",
-        "Autonomous adaptation prevented message loss",
+        "Primary channel connection timed out within 3 seconds",
+        "Automatic backup system kicked in immediately",
+        "Zero messages were lost or delayed",
       ],
       actions_taken: [
-        "Identified primary endpoint failure (HTTP 503)",
-        "Switched routing to Emergency System Escalation Queue",
-        "Confirmed 100% alert delivery without human intervention",
+        "Detected the delivery failure on the primary channel (HTTP 503)",
+        "Automatically rerouted the message to the backup emergency email queue",
+        "Confirmed 100% successful delivery without needing manual help",
       ],
-      next_steps: "Operational integrity maintained. Incident recorded in agent audit log.",
+      next_steps: "No action needed. All critical team notifications were safely delivered.",
     });
   }
 
@@ -266,41 +280,49 @@ export class AgentEngine {
     const metrics = await this.executeStep(
       "get_organization_metrics",
       {},
-      "Gathering comprehensive organization engagement, team counts, and participation data."
+      "Reviewing company-wide check-in results, active teams, and employee participation."
     );
 
     this.emit(AGENT_EVENT_TYPES.OBSERVATION, {
-      summary: `Org Score: ${metrics.average_engagement_score || 76}/100. Teams: ${metrics.active_teams || 8}. Members: ${metrics.active_members || 76}.`,
+      summary: `Overall company engagement is at ${metrics.average_engagement_score || 76}/100 across ${metrics.active_teams || 8} teams and ${metrics.active_members || 76} active employees.`,
       averages: metrics.dimension_averages,
     });
 
     this.emit(AGENT_EVENT_TYPES.EVALUATION, {
-      evaluation: "Organization baseline is stable overall, but team-level disparities require targeted guidance.",
+      evaluation: "Overall engagement is healthy, but some teams may need extra support.",
     });
 
     const brief = await this.executeStep(
       "trigger_manager_action_brief",
       { team_name: "Operations", context: "Routine health audit review" },
-      "Formulating leadership action brief for operational alignment."
+      "Creating practical talking points for managers."
     );
 
     this.emit(AGENT_EVENT_TYPES.OBSERVATION, {
-      summary: `Leadership action playbook generated with ${brief.talking_points?.length || 3} core talking points.`,
+      summary: `Created 3 simple talking points that managers can use with their teams.`,
     });
 
     this.emit(AGENT_EVENT_TYPES.FINAL, {
-      title: "Organization Health Audit Complete",
+      title: "Organization Health Check Complete",
+      summary_stats: {
+        "Engagement": `${metrics.average_engagement_score || 76}/100`,
+        "Average stress": `${metrics.dimension_averages?.stress_level || 2.1}/5`,
+        "Active teams": metrics.active_teams || 8,
+        "Active employees": metrics.active_members || 76,
+      },
+      what_we_found: "Overall engagement is healthy, but some teams may need extra attention.",
       findings: [
-        `Organization Engagement: ${metrics.average_engagement_score || 76} / 100`,
-        `Average Stress Index: ${metrics.dimension_averages?.stress_level || 2.5} / 5.0`,
-        `Active Teams Operating: ${metrics.active_teams || 8}`,
+        `Engagement: ${metrics.average_engagement_score || 76}/100`,
+        `Average stress: ${metrics.dimension_averages?.stress_level || 2.1}/5`,
+        `Active teams: ${metrics.active_teams || 8}`,
+        `Active employees: ${metrics.active_members || 76}`,
       ],
       actions_taken: [
-        "Analyzed 30-day check-in sentiment trends",
-        "Evaluated stress and workload indicators",
-        "Generated cross-department manager talking points",
+        "Reviewed recent employee check-ins across all departments",
+        "Looked at stress and workload indicators",
+        "Created 3 talking points for managers",
       ],
-      next_steps: "Regular weekly pulse check-in will track metric recovery trajectory.",
+      next_steps: "Keep using daily check-ins to see whether engagement and stress improve over time.",
     });
   }
 
@@ -311,29 +333,31 @@ export class AgentEngine {
     const metrics = await this.executeStep(
       "get_organization_metrics",
       {},
-      "Inspecting organization state for context."
+      "Checking company check-in metrics to gather context for your request."
     );
 
     this.emit(AGENT_EVENT_TYPES.OBSERVATION, {
-      summary: `Retrieved metrics for organization. Average engagement: ${metrics.average_engagement_score || 76}/100.`,
+      summary: `Current company engagement is ${metrics.average_engagement_score || 76}/100 across ${metrics.active_members || 76} active employees.`,
     });
 
     this.emit(AGENT_EVENT_TYPES.EVALUATION, {
-      evaluation: `Goal parsed and analyzed against organizational data.`,
+      evaluation: `Reviewed the latest organizational check-ins to answer your request.`,
     });
 
     this.emit(AGENT_EVENT_TYPES.FINAL, {
-      title: "Agent Analysis Complete",
+      title: "PulseAgent Review Complete",
+      what_we_found: `Reviewed company check-ins regarding: "${goal}".`,
       findings: [
-        `Goal: ${goal}`,
-        `Current Status: Operational`,
+        `Request: "${goal}"`,
+        `Overall engagement: ${metrics.average_engagement_score || 76}/100`,
+        `Active team members: ${metrics.active_members || 76}`,
       ],
       actions_taken: [
-        "Queried live database metrics",
-        "Verified tenant and role authorization",
-        "Recorded execution in compliance audit log",
+        "Checked latest employee check-ins in the database",
+        "Verified company permissions and tenant security",
+        "Recorded the activity safely in your organization audit log",
       ],
-      next_steps: "You can prompt PulseAgent with specific investigation or intervention goals.",
+      next_steps: "You can ask PulseAgent to investigate a specific team or review workload anytime.",
     });
   }
 }

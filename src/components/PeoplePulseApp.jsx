@@ -4009,13 +4009,13 @@ function AdminDashboard({ setMobileOpen }) {
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <p className="text-sm font-bold" style={{ color: T.text }}>PulseAgent Autonomous Operations</p>
+                  <p className="text-sm font-bold" style={{ color: T.text }}>PulseAgent HR Copilot</p>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                    Live Autonomous Loop
+                    Active
                   </span>
                 </div>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  Autonomous HR operations engine monitoring burnout signals, team friction, and dynamic survey follow-ups.
+                  Monitors employee wellbeing, spots burnout early, and helps managers support their teams.
                 </p>
               </div>
             </div>

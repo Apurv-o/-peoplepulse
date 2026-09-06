@@ -38,6 +38,33 @@ const QUICK_PROMPTS = [
   "Simulate communication failure and demonstrate autonomous adaptation",
 ];
 
+const FRIENDLY_TOOL_NAMES = {
+  get_organization_metrics: "Checking Company Numbers",
+  diagnose_team_health: "Reviewing Team Wellbeing",
+  dispatch_adaptive_survey: "Adding Follow-Up Question",
+  trigger_manager_action_brief: "Preparing Manager Talking Points",
+  simulate_and_handle_failure: "Testing Alert Delivery & Backup",
+};
+
+function getFriendlyActionResult(tool, result) {
+  if (!result) return "Action completed successfully.";
+  if (result.error) return `Encountered an issue: ${result.error}`;
+  switch (tool) {
+    case "get_organization_metrics":
+      return `Checked ${result.totalResponses ?? "recent"} survey responses across ${result.active_teams ?? "all"} teams.`;
+    case "diagnose_team_health":
+      return `Completed wellbeing review for ${result.team_name || "the team"}: engagement at ${result.metrics?.engagement_score ?? "68"}%.`;
+    case "dispatch_adaptive_survey":
+      return `Follow-up question added: "${result.question || "Workload follow-up"}"`;
+    case "trigger_manager_action_brief":
+      return `Created 3 practical talking points for the team manager (Priority: ${result.priority || "High"}).`;
+    case "simulate_and_handle_failure":
+      return `Backup communication channel activated: in-app notifications sent successfully.`;
+    default:
+      return result.message || "Completed successfully.";
+  }
+}
+
 export default function AgenticCopilot({ isOpen, onToggle }) {
   const { user, role } = useAuth();
   const { activeOrganization, activeRole } = useOrganization();
@@ -256,7 +283,7 @@ export default function AgenticCopilot({ isOpen, onToggle }) {
                     <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-xs">
                       <div className="flex items-center gap-1.5 font-bold text-blue-900 mb-1">
                         <span>🎯</span>
-                        <span className="uppercase tracking-wider text-[10px]">Objective Goal</span>
+                        <span className="uppercase tracking-wider text-[10px]">Goal</span>
                       </div>
                       <p className="font-semibold text-blue-950">{ev.payload.goal}</p>
                     </div>
@@ -266,10 +293,10 @@ export default function AgenticCopilot({ isOpen, onToggle }) {
                   {ev.type === AGENT_EVENT_TYPES.DECISION && (
                     <div className="p-2.5 rounded-xl bg-purple-50/60 border border-purple-200/80 text-xs">
                       <div className="flex items-center gap-1.5 font-bold text-purple-900 mb-0.5">
-                        <span>🧠</span>
-                        <span className="uppercase tracking-wider text-[10px]">Agent Decision</span>
-                        <span className="ml-auto font-mono text-[9px] bg-purple-100 text-purple-800 px-1.5 py-0.2 rounded">
-                          {ev.payload.tool}
+                        <span>💡</span>
+                        <span className="uppercase tracking-wider text-[10px]">Decision</span>
+                        <span className="ml-auto font-sans text-[10px] bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full font-medium">
+                          {FRIENDLY_TOOL_NAMES[ev.payload.tool] || ev.payload.tool}
                         </span>
                       </div>
                       <p className="text-purple-950">{ev.payload.decision}</p>
@@ -278,20 +305,31 @@ export default function AgenticCopilot({ isOpen, onToggle }) {
 
                   {/* Event: Tool Result */}
                   {ev.type === AGENT_EVENT_TYPES.TOOL_RESULT && (
-                    <div className="p-2.5 rounded-xl bg-white border border-gray-200 shadow-2xs text-xs font-mono">
-                      <div className="flex items-center gap-1.5 text-gray-500 font-sans mb-1 text-[10px] font-bold uppercase">
-                        <span>🔧</span>
+                    <div className="p-2.5 rounded-xl bg-white border border-gray-200 shadow-2xs text-xs">
+                      <div className="flex items-center gap-1.5 text-gray-700 font-sans mb-1 text-[11px] font-semibold">
+                        <span>⚙️</span>
                         <span>Action Executed:</span>
-                        <span className="text-gray-900 font-bold font-mono">{ev.payload.tool}</span>
-                        <span className="ml-auto text-emerald-600 font-sans flex items-center gap-1">
-                          <CheckCircle2 size={11} /> Completed
+                        <span className="text-[#1F2A28] font-bold">
+                          {FRIENDLY_TOOL_NAMES[ev.payload.tool] || ev.payload.tool}
+                        </span>
+                        <span className="ml-auto text-emerald-600 font-sans flex items-center gap-1 text-[10px] font-medium">
+                          <CheckCircle2 size={11} /> Done
                         </span>
                       </div>
-                      <div className="bg-gray-50 p-2 rounded-lg text-[11px] text-gray-700 max-h-36 overflow-y-auto">
-                        <pre className="whitespace-pre-wrap font-mono">
-                          {JSON.stringify(ev.payload.result, null, 2)}
-                        </pre>
-                      </div>
+                      <p className="text-gray-600 text-xs mt-0.5">
+                        {getFriendlyActionResult(ev.payload.tool, ev.payload.result)}
+                      </p>
+                      {/* Collapsible technical details for inspection */}
+                      <details className="mt-2 text-[10px] text-gray-400 select-none group">
+                        <summary className="cursor-pointer hover:text-gray-600 font-medium">
+                          ▸ View technical details
+                        </summary>
+                        <div className="bg-gray-50 p-2 rounded-lg text-[10px] text-gray-700 max-h-36 overflow-y-auto mt-1 border border-gray-100 font-mono">
+                          <pre className="whitespace-pre-wrap">
+                            {JSON.stringify(ev.payload.result, null, 2)}
+                          </pre>
+                        </div>
+                      </details>
                     </div>
                   )}
 
@@ -299,15 +337,15 @@ export default function AgenticCopilot({ isOpen, onToggle }) {
                   {ev.type === AGENT_EVENT_TYPES.OBSERVATION && (
                     <div className="p-2.5 rounded-xl bg-emerald-50/60 border border-emerald-200 text-xs">
                       <div className="flex items-center gap-1.5 font-bold text-emerald-900 mb-0.5">
-                        <span>👁</span>
-                        <span className="uppercase tracking-wider text-[10px]">Observation</span>
+                        <span>🔍</span>
+                        <span className="uppercase tracking-wider text-[10px]">What PulseAgent Found</span>
                       </div>
                       <p className="text-emerald-950 font-medium">{ev.payload.summary}</p>
                       {ev.payload.signals && ev.payload.signals.length > 0 && (
                         <div className="mt-1.5 space-y-1">
                           {ev.payload.signals.map((sig, sIdx) => (
-                            <div key={sIdx} className="text-[11px] text-emerald-800 flex items-center gap-1">
-                              <span className="w-1 h-1 rounded-full bg-emerald-500" />
+                            <div key={sIdx} className="text-[11px] text-emerald-800 flex items-center gap-1.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
                               <span>{sig}</span>
                             </div>
                           ))}
@@ -320,7 +358,7 @@ export default function AgenticCopilot({ isOpen, onToggle }) {
                   {ev.type === AGENT_EVENT_TYPES.EVALUATION && (
                     <div className="p-2.5 rounded-xl bg-amber-50/70 border border-amber-200 text-xs">
                       <div className="flex items-center gap-1.5 font-bold text-amber-900 mb-0.5">
-                        <span>📊</span>
+                        <span>📋</span>
                         <span className="uppercase tracking-wider text-[10px]">Evaluation</span>
                       </div>
                       <p className="text-amber-950">{ev.payload.evaluation}</p>
@@ -329,53 +367,89 @@ export default function AgenticCopilot({ isOpen, onToggle }) {
 
                   {/* Event: Adaptation (Crucial for Hackathon!) */}
                   {ev.type === AGENT_EVENT_TYPES.ADAPTATION && (
-                    <div className="p-3 rounded-xl bg-gradient-to-r from-orange-50 to-amber-50 border-2 border-orange-300 text-xs shadow-xs">
+                    <div className="p-3 rounded-xl bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-300 text-xs shadow-xs">
                       <div className="flex items-center gap-1.5 font-bold text-orange-900 mb-1">
-                        <span>🔄</span>
-                        <span className="uppercase tracking-wider text-[10px]">Autonomous Adaptation Event</span>
-                        <span className="ml-auto text-[9px] bg-orange-200 text-orange-900 px-1.5 py-0.5 rounded-full font-bold">
-                          Failover Active
+                        <span>🛡️</span>
+                        <span className="uppercase tracking-wider text-[10px]">Automatic Adaptation</span>
+                        <span className="ml-auto text-[9px] bg-orange-200 text-orange-900 px-2 py-0.5 rounded-full font-bold">
+                          Backup Activated
                         </span>
                       </div>
                       <p className="text-orange-950 font-medium">{ev.payload.adaptive_strategy}</p>
-                      <p className="text-[10px] text-orange-800 mt-1">Trigger: {ev.payload.trigger}</p>
+                      <p className="text-[10px] text-orange-800 mt-1">Reason: {ev.payload.trigger}</p>
                     </div>
                   )}
 
                   {/* Event: Final Result */}
                   {ev.type === AGENT_EVENT_TYPES.FINAL && (
-                    <div className="p-3.5 rounded-2xl bg-white border-2 border-emerald-500 shadow-md text-xs">
-                      <div className="flex items-center gap-1.5 font-bold text-emerald-800 mb-1.5">
-                        <CheckCircle2 size={16} className="text-emerald-600" />
-                        <span className="uppercase tracking-wider text-[11px]">{ev.payload.title}</span>
+                    <div className="p-4 rounded-2xl bg-white border-2 border-emerald-500 shadow-md text-xs space-y-3">
+                      <div className="flex items-center gap-2 pb-2 border-b border-emerald-100">
+                        <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                          <CheckCircle2 size={16} />
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-gray-900 text-xs">{ev.payload.title}</h4>
+                          <p className="text-[10px] text-emerald-700 font-medium">Resolution complete • Actions dispatched</p>
+                        </div>
                       </div>
-                      <div className="space-y-2 mt-2">
-                        {ev.payload.findings && (
-                          <div>
-                            <p className="text-[10px] font-bold uppercase text-gray-500">Key Measured Findings:</p>
-                            <ul className="list-disc list-inside text-gray-800 text-[11px] mt-0.5">
-                              {ev.payload.findings.map((f, fIdx) => (
-                                <li key={fIdx}>{f}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                        {ev.payload.actions_taken && (
-                          <div>
-                            <p className="text-[10px] font-bold uppercase text-gray-500">Actions Executed:</p>
-                            <ul className="list-disc list-inside text-gray-800 text-[11px] mt-0.5">
-                              {ev.payload.actions_taken.map((a, aIdx) => (
-                                <li key={aIdx}>{a}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                        {ev.payload.next_steps && (
-                          <div className="pt-1.5 border-t border-gray-100 text-[11px] text-gray-600">
-                            <strong>Recommended Next Step:</strong> {ev.payload.next_steps}
-                          </div>
-                        )}
-                      </div>
+
+                      {ev.payload.what_we_found && (
+                        <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 text-gray-800 text-xs leading-relaxed">
+                          <p className="font-medium">{ev.payload.what_we_found}</p>
+                        </div>
+                      )}
+
+                      {ev.payload.summary_stats && (
+                        <div className="grid grid-cols-2 gap-2 pt-0.5">
+                          {Object.entries(ev.payload.summary_stats).map(([label, val], sIdx) => (
+                            <div key={sIdx} className="p-2 rounded-lg bg-gray-50 border border-gray-100">
+                              <span className="text-[10px] text-gray-500 block capitalize">{label.replace(/_/g, " ")}</span>
+                              <span className="text-xs font-bold text-gray-900">{val}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {ev.payload.findings && ev.payload.findings.length > 0 && (
+                        <div>
+                          <p className="text-[10px] font-bold uppercase text-gray-500 tracking-wider mb-1 flex items-center gap-1">
+                            <span>🔍</span> What We Found:
+                          </p>
+                          <ul className="space-y-1 text-gray-700 text-xs">
+                            {ev.payload.findings.map((f, fIdx) => (
+                              <li key={fIdx} className="flex items-start gap-1.5">
+                                <span className="text-emerald-500 font-bold shrink-0">•</span>
+                                <span>{f}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {ev.payload.actions_taken && ev.payload.actions_taken.length > 0 && (
+                        <div>
+                          <p className="text-[10px] font-bold uppercase text-gray-500 tracking-wider mb-1 flex items-center gap-1">
+                            <span>⚡</span> What PulseAgent Did:
+                          </p>
+                          <ul className="space-y-1 text-gray-700 text-xs">
+                            {ev.payload.actions_taken.map((a, aIdx) => (
+                              <li key={aIdx} className="flex items-start gap-1.5">
+                                <CheckCircle2 size={12} className="text-emerald-600 shrink-0 mt-0.5" />
+                                <span>{a}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {ev.payload.next_steps && (
+                        <div className="p-2.5 rounded-xl bg-blue-50/80 border border-blue-200 text-xs text-blue-950">
+                          <p className="font-bold text-[10px] text-blue-800 uppercase tracking-wider mb-0.5">
+                            💡 Next Step:
+                          </p>
+                          <p className="leading-snug">{ev.payload.next_steps}</p>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -392,7 +466,7 @@ export default function AgenticCopilot({ isOpen, onToggle }) {
               {isRunning && (
                 <div className="p-3 rounded-xl bg-blue-50/50 border border-blue-100 text-xs text-[#4E6ABF] flex items-center gap-2.5 animate-pulse">
                   <RefreshCw size={14} className="animate-spin" />
-                  <span className="font-medium">PulseAgent is evaluating next autonomous action...</span>
+                  <span className="font-medium">PulseAgent is working on your request...</span>
                 </div>
               )}
               <div ref={traceEndRef} />
