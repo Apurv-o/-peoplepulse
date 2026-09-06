@@ -4102,6 +4102,30 @@ function triggerGmailWeb({ email, link, role, orgName }) {
   window.open(gmailUrl, "_blank", "noopener,noreferrer");
 }
 
+// Background dispatch via dedicated Resend Edge Function
+async function dispatchInviteEmailViaBackend({ email, link, role, orgName, teamName }) {
+  if (!supabase) return { status: "unavailable" };
+  try {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData?.session?.access_token;
+    if (!token) return { status: "no_session" };
+
+    const { data, error } = await supabase.functions.invoke("send-invite-email", {
+      body: { email, link, role, orgName, teamName },
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (error) {
+      console.warn("[dispatchInviteEmailViaBackend error]:", error.message);
+      return { status: "error", message: error.message };
+    }
+    return data;
+  } catch (err) {
+    console.warn("[dispatchInviteEmailViaBackend exception]:", err.message);
+    return { status: "error", message: err.message };
+  }
+}
+
 function AdminEmployees({ setMobileOpen }) {
   const {
     activeOrganizationId,
@@ -4303,26 +4327,42 @@ function AdminEmployees({ setMobileOpen }) {
           teamName: assignedTeam?.name,
         });
         await navigator.clipboard.writeText(link);
-        const trimmed = inv.email.trim();
-        if (trimmed.toLowerCase().endsWith("@gmail.com")) {
-          triggerGmailWeb({
-            email: trimmed,
-            link,
-            role: inv.role,
-            orgName: activeOrganization?.name,
+        // 1. Attempt automatic backend dispatch via Resend
+        const emailRes = await dispatchInviteEmailViaBackend({
+          email: trimmed,
+          link,
+          role: inv.role,
+          orgName: activeOrganization?.name,
+          teamName: assignedTeam?.name,
+        });
+
+        if (emailRes?.status === "sent") {
+          setActionNotice({
+            type: "success",
+            text: `Invitation resent directly to ${trimmed} via Resend! Link also copied to clipboard.`,
           });
         } else {
-          triggerEmailApp({
-            email: trimmed,
-            link,
-            role: inv.role,
-            orgName: activeOrganization?.name,
+          // Fallback to mail app
+          if (trimmed.toLowerCase().endsWith("@gmail.com")) {
+            triggerGmailWeb({
+              email: trimmed,
+              link,
+              role: inv.role,
+              orgName: activeOrganization?.name,
+            });
+          } else {
+            triggerEmailApp({
+              email: trimmed,
+              link,
+              role: inv.role,
+              orgName: activeOrganization?.name,
+            });
+          }
+          setActionNotice({
+            type: "success",
+            text: `Invitation link copied! Mail compose opened for ${trimmed}.`,
           });
         }
-        setActionNotice({
-          type: "success",
-          text: `Invitation renewed & email client opened for ${inv.email}! Link also copied to clipboard.`,
-        });
       } else {
         setActionNotice({
           type: "success",
@@ -4391,22 +4431,36 @@ function AdminEmployees({ setMobileOpen }) {
         setGeneratedInviteLink(link);
 
         if (autoSendEmail) {
-          if (trimmedEmail.toLowerCase().endsWith("@gmail.com")) {
-            triggerGmailWeb({
-              email: trimmedEmail,
-              link,
-              role: inviteRole,
-              orgName: activeOrganization?.name,
-            });
-            setEmailDispatchedNotice("Gmail compose opened in a new tab with pre-filled invitation.");
+          // 1. First attempt automatic delivery via dedicated Resend Edge Function
+          const emailRes = await dispatchInviteEmailViaBackend({
+            email: trimmedEmail,
+            link,
+            role: inviteRole,
+            orgName: activeOrganization?.name,
+            teamName: teamObj?.name,
+          });
+
+          if (emailRes?.status === "sent") {
+            setEmailDispatchedNotice("Invitation email delivered directly to " + trimmedEmail + " via Resend.");
           } else {
-            triggerEmailApp({
-              email: trimmedEmail,
-              link,
-              role: inviteRole,
-              orgName: activeOrganization?.name,
-            });
-            setEmailDispatchedNotice("Default mail app opened with pre-filled invitation.");
+            // Graceful fallback to opening user's mail client if backend email failed or unconfigured
+            if (trimmedEmail.toLowerCase().endsWith("@gmail.com")) {
+              triggerGmailWeb({
+                email: trimmedEmail,
+                link,
+                role: inviteRole,
+                orgName: activeOrganization?.name,
+              });
+              setEmailDispatchedNotice("Gmail compose opened with pre-filled invitation.");
+            } else {
+              triggerEmailApp({
+                email: trimmedEmail,
+                link,
+                role: inviteRole,
+                orgName: activeOrganization?.name,
+              });
+              setEmailDispatchedNotice("Default mail app opened with pre-filled invitation.");
+            }
           }
         }
       }
