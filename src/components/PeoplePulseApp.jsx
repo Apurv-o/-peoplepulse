@@ -2650,15 +2650,17 @@ function EmployeeCheckin({ setMobileOpen, onSubmitted }) {
 
   const complete = CHECKIN_DIMENSIONS.every((d) => ratings[d.key]);
 
-  // Resolve user's trusted team from database on mount
+  // Resolve user's trusted team from database on mount or when active organization changes
   useEffect(() => {
     if (!user || !supabase) return;
     let isMounted = true;
-    supabase.rpc("get_current_user_team_id").then(({ data, error }) => {
+    const rpcParams = activeOrganizationId ? { p_org_id: activeOrganizationId } : {};
+
+    supabase.rpc("get_current_user_team_id", rpcParams).then(({ data, error }) => {
       if (!isMounted) return;
       if (error) {
         if (error.message?.includes("NO_TEAM_ASSIGNED")) {
-          setTeamError("Your account is not assigned to a team. Please contact your workspace administrator.");
+          setTeamError("Your account is not assigned to a team in this organization. Please contact your workspace administrator.");
         } else if (error.message?.includes("MULTIPLE_TEAMS_ASSIGNED")) {
           setTeamError("Your account is assigned to multiple teams. Please contact your workspace administrator.");
         } else {
@@ -2670,7 +2672,7 @@ function EmployeeCheckin({ setMobileOpen, onSubmitted }) {
       }
     });
     return () => { isMounted = false; };
-  }, [user]);
+  }, [user, activeOrganizationId]);
 
   const handleSubmit = async () => {
     setSubmitError(null);
@@ -2694,12 +2696,13 @@ function EmployeeCheckin({ setMobileOpen, onSubmitted }) {
           return;
         }
 
-        // 2. Resolve trusted team ID directly using the same authenticated session
-        const { data: currentTeamId, error: teamRpcError } = await supabase.rpc("get_current_user_team_id");
+        // 2. Resolve trusted team ID directly using the active organization
+        const rpcParams = (activeOrganizationId) ? { p_org_id: activeOrganizationId } : {};
+        const { data: currentTeamId, error: teamRpcError } = await supabase.rpc("get_current_user_team_id", rpcParams);
         if (teamRpcError || !currentTeamId) {
           console.error("[Checkin Error] Failed resolving team ID:", teamRpcError);
           if (teamRpcError?.message?.includes("NO_TEAM_ASSIGNED")) {
-            setSubmitError("Your account is not assigned to a team. Please contact your workspace administrator.");
+            setSubmitError("Your account is not assigned to a team in this organization. Please contact your workspace administrator.");
           } else if (teamRpcError?.message?.includes("MULTIPLE_TEAMS_ASSIGNED")) {
             setSubmitError("Your account is assigned to multiple teams. Please contact your administrator.");
           } else {
