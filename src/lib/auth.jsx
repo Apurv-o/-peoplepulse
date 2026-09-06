@@ -148,6 +148,22 @@ export function AuthProvider({ children }) {
       ? `${window.location.origin}/#reset-password`
       : undefined;
 
+    // 1. Dispatch via high-deliverability Brevo Edge Function
+    try {
+      const { data: fnData, error: fnError } = await supabase.functions.invoke("send-reset-password", {
+        body: { email: cleanEmail, redirectTo: redirectUrl }
+      });
+      if (!fnError && fnData?.status === "sent") {
+        return fnData;
+      }
+      if (fnError) {
+        console.warn("[resetPassword] Edge Function notice:", fnError);
+      }
+    } catch (fnEx) {
+      console.warn("[resetPassword] Edge Function invocation exception:", fnEx);
+    }
+
+    // 2. Fallback to native Supabase Auth reset
     const { data, error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
       redirectTo: redirectUrl,
     });
