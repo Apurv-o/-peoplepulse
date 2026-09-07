@@ -1003,7 +1003,7 @@ function FinalCTA({ onSignIn, onGetStarted }) {
 /* ============================================================
    FOOTER
    ============================================================ */
-function Footer({ onSignIn }) {
+function Footer({ onSignIn, onEmployeeSignIn }) {
   const scrollTo = (id) => {
     const el = document.getElementById(id);
     if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1069,7 +1069,7 @@ export default function PeoplePulseHomepage({ onSignIn, onEmployeeSignIn, onGetS
       <EmployeeExperience />
       <FeatureGrid />
       <FinalCTA onSignIn={handleSignIn} onGetStarted={handleGetStarted} />
-      <Footer onSignIn={handleSignIn} />
+      <Footer onSignIn={handleSignIn} onEmployeeSignIn={handleEmployeeSignIn} />
     </div>
   );
 }

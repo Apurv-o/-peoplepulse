@@ -373,12 +373,63 @@ function AppContent() {
   );
 }
 
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error("[PeoplePulse ErrorBoundary]", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center bg-[#F7F7F5]">
+          <div className="w-14 h-14 rounded-2xl bg-red-50 border border-red-200 flex items-center justify-center text-2xl mx-auto mb-4 shadow-sm">
+            ⚠️
+          </div>
+          <h1 className="text-xl font-bold text-[#1F2A28] mb-2">Something unexpected occurred</h1>
+          <p className="text-xs text-[#7B8494] max-w-md mb-6 leading-relaxed">
+            The application encountered a temporary issue. Please reload or return to the homepage.
+          </p>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 rounded-xl text-xs font-semibold bg-[#4E6ABF] text-white hover:bg-[#3E569C] transition-colors shadow-sm cursor-pointer"
+            >
+              Reload Page
+            </button>
+            <button
+              onClick={() => {
+                window.location.hash = "";
+                window.location.reload();
+              }}
+              className="px-4 py-2 rounded-xl text-xs font-semibold bg-white border border-[#E1E4EA] text-[#1F2A28] hover:bg-gray-50 transition-colors cursor-pointer"
+            >
+              Return Home
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function App() {
   return (
-    <AuthProvider>
-      <OrganizationProvider>
-        <AppContent />
-      </OrganizationProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <OrganizationProvider>
+          <AppContent />
+        </OrganizationProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
