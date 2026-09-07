@@ -135,9 +135,18 @@ function AppContent() {
       }
 
       const effectiveRole = activeRole || profile?.role || serverRole || "employee";
-      const isEmployee = effectiveRole === "employee";
+      const isEmployee = effectiveRole === "employee" && organizations.length > 0;
 
-      // If user is an employee, NEVER send them to organization onboarding
+      // If user has 0 organizations and is not in demo mode, ALWAYS send them to onboarding to create their company workspace
+      if (organizations.length === 0 && !isDemoModeRef.current) {
+        if (currentScreen !== "onboarding") {
+          setCurrentScreen("onboarding");
+          syncHashToScreen("onboarding");
+        }
+        return;
+      }
+
+      // If user is an employee within an existing organization, NEVER send them to onboarding
       if (isEmployee) {
         if (currentScreen !== "app") {
           setCurrentScreen("app");
@@ -155,18 +164,9 @@ function AppContent() {
 
       // If on login or signup screen and authenticated, forward to app or onboarding
       if (currentScreen === "login" || currentScreen === "signup" || currentScreen === "employee-login" || hash === "#login" || hash === "#signup" || hash === "#employee-login") {
-        if (organizations.length === 0 && !isDemoModeRef.current && (currentScreen === "signup" || hash === "#signup" || effectiveRole === "admin")) {
-          setCurrentScreen("onboarding");
-          syncHashToScreen("onboarding");
-          return;
-        }
-        setCurrentScreen("app");
-        syncHashToScreen("app");
-        return;
-      }
-
-      // If user has 0 organizations, prompt onboarding only for non-employees on onboarding route
-      if (organizations.length === 0 && !isDemoModeRef.current && currentScreen === "onboarding") {
+        const target = (organizations.length === 0 && !isDemoModeRef.current) ? "onboarding" : "app";
+        setCurrentScreen(target);
+        syncHashToScreen(target);
         return;
       }
     }
@@ -200,29 +200,44 @@ function AppContent() {
         }
       } else if (hash === "#signup") {
         if (userRef.current && !isDemoModeRef.current) {
-          setCurrentScreen("app");
-          syncHashToScreen("app");
+          const target = (organizationsRef.current && organizationsRef.current.length > 0) ? "app" : "onboarding";
+          setCurrentScreen(target);
+          syncHashToScreen(target);
         } else {
           setCurrentScreen("signup");
         }
       } else if (hash === "#employee-login") {
         if (userRef.current && !isDemoModeRef.current) {
-          setCurrentScreen("app");
-          syncHashToScreen("app");
+          const target = (organizationsRef.current && organizationsRef.current.length > 0) ? "app" : "onboarding";
+          setCurrentScreen(target);
+          syncHashToScreen(target);
         } else {
           setCurrentScreen("employee-login");
         }
       } else if (hash === "#login") {
         if (userRef.current && !isDemoModeRef.current) {
-          setCurrentScreen("app");
-          syncHashToScreen("app");
+          const target = (organizationsRef.current && organizationsRef.current.length > 0) ? "app" : "onboarding";
+          setCurrentScreen(target);
+          syncHashToScreen(target);
         } else {
           setCurrentScreen("login");
+        }
+      } else if (hash.startsWith("#email-confirmed")) {
+        if (userRef.current && !isDemoModeRef.current) {
+          const target = (organizationsRef.current && organizationsRef.current.length > 0) ? "app" : "onboarding";
+          setCurrentScreen(target);
+          syncHashToScreen(target);
+        } else {
+          setCurrentScreen("login");
+          syncHashToScreen("login");
         }
       } else if (hash === "#app" || hash === "#employee-checkin") {
         if (!userRef.current && !isDemoModeRef.current) {
           setCurrentScreen("login");
           syncHashToScreen("login");
+        } else if (organizationsRef.current && organizationsRef.current.length === 0) {
+          setCurrentScreen("onboarding");
+          syncHashToScreen("onboarding");
         } else {
           setCurrentScreen("app");
         }
@@ -241,7 +256,7 @@ function AppContent() {
 
     let targetScreen = screen;
     if ((targetScreen === "login" || targetScreen === "signup" || targetScreen === "employee-login") && userRef.current && !options.isDemo) {
-      targetScreen = "app";
+      targetScreen = organizations.length === 0 ? "onboarding" : "app";
     }
 
     setCurrentScreen(targetScreen);
@@ -304,8 +319,8 @@ function AppContent() {
 
   // 2. Organization Onboarding View
   if (currentScreen === "onboarding") {
-    const effectiveRole = isDemoMode ? demoRole : (activeRole || profile?.role || serverRole || "employee");
-    if (organizations.length > 0 || effectiveRole === "employee") {
+    if (organizations.length > 0) {
+      const effectiveRole = isDemoMode ? demoRole : (activeRole || profile?.role || serverRole || "admin");
       return (
         <PeoplePulseApp
           role={effectiveRole}
@@ -331,7 +346,13 @@ function AppContent() {
     return (
       <LoginView
         initialMode={currentScreen === "signup" ? "signup" : currentScreen === "employee-login" ? "employee" : "login"}
-        onSignIn={(role, meta) => navigateTo("app", role, meta)}
+        onSignIn={(role, meta) => {
+          if (!meta?.isDemo && organizations.length === 0) {
+            navigateTo("onboarding", role, meta);
+          } else {
+            navigateTo("app", role, meta);
+          }
+        }}
         onReturnHome={() => navigateTo("homepage")}
         onGoToSignup={() => navigateTo("signup")}
         onGoToLogin={() => navigateTo("login")}

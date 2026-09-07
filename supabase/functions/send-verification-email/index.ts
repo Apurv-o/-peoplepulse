@@ -9,6 +9,7 @@ interface VerifyEmailPayload {
   email: string;
   password?: string;
   name?: string;
+  role?: string;
   redirectTo?: string;
 }
 
@@ -23,7 +24,7 @@ Deno.serve(async (req) => {
     const brevoApiKey = Deno.env.get("BREVO_API_KEY");
 
     const body: VerifyEmailPayload = await req.json().catch(() => ({}));
-    const { email, password, name, redirectTo } = body;
+    const { email, password, name, role, redirectTo } = body;
 
     if (!email) {
       return new Response(
@@ -34,6 +35,7 @@ Deno.serve(async (req) => {
 
     const cleanEmail = email.trim().toLowerCase();
     const userName = (name || "").trim() || cleanEmail.split("@")[0] || "there";
+    const userRole = (role || "").trim() || "admin";
 
     const adminClient = createClient(supabaseUrl, supabaseServiceKey, {
       auth: { autoRefreshToken: false, persistSession: false },
@@ -54,7 +56,7 @@ Deno.serve(async (req) => {
         email: cleanEmail,
         password: password,
         options: {
-          data: { name: userName },
+          data: { name: userName, role: userRole },
           redirectTo: redirectTarget,
         },
       });

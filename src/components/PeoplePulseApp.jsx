@@ -920,7 +920,7 @@ export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoT
     try {
       const res = await verifyEmailOtp(pendingVerificationEmail, verificationCode);
       const userRole = res?.profile?.role || "admin";
-      onSignIn?.(userRole, { isDemo: false, profile: res?.profile });
+      onSignIn?.(userRole, { isDemo: false, profile: res?.profile, isNewCompany: true });
     } catch (err) {
       console.error("[Verify OTP Error]", err);
       setAuthError(err.message || "Invalid or expired verification code. Please check your email or request a new code.");
@@ -970,7 +970,7 @@ export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoT
           return;
         }
         const cleanEmail = email.trim().toLowerCase();
-        const signupRes = await signUp(cleanEmail, password, { name: name.trim() });
+        const signupRes = await signUp(cleanEmail, password, { name: name.trim(), role: "admin" });
         if (signupRes?.user) {
           // When email verification is active, session is null until verified
           if (!signupRes.session) {
@@ -984,7 +984,7 @@ export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoT
           setSignupSuccess(true);
           try {
             const loginRes = await signIn(cleanEmail, password);
-            onSignIn?.("admin", { isDemo: false, profile: loginRes?.profile });
+            onSignIn?.("admin", { isDemo: false, profile: loginRes?.profile, isNewCompany: true });
           } catch (autoLoginErr) {
             setAuthError("Account created! Please sign in with your password.");
             setMode("login");

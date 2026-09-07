@@ -117,6 +117,8 @@ export function AuthProvider({ children }) {
     }
     const redirectUrl = `${origin.replace(/\/$/, "")}/#email-confirmed`;
 
+    const userRole = metadata?.role || "admin";
+
     // 1. Dispatch via high-deliverability Brevo Edge Function
     try {
       const { data: fnData, error: fnError } = await supabase.functions.invoke("send-verification-email", {
@@ -124,6 +126,7 @@ export function AuthProvider({ children }) {
           email: cleanEmail,
           password,
           name: metadata?.name || cleanEmail.split("@")[0],
+          role: userRole,
           redirectTo: redirectUrl,
         },
       });
@@ -163,7 +166,7 @@ export function AuthProvider({ children }) {
       email: cleanEmail,
       password,
       options: {
-        data: metadata,
+        data: { role: userRole, ...metadata },
         emailRedirectTo: redirectUrl,
       },
     });
