@@ -108,11 +108,140 @@ export function AuthProvider({ children }) {
     if (!isSupabaseConfigured || !supabase) {
       throw new Error("Supabase is not configured yet with valid credentials.");
     }
+    const cleanEmail = email.trim().toLowerCase();
+    let origin = typeof window !== "undefined" && window.location?.origin
+      ? window.location.origin
+      : "https://peoplepulse-app.vercel.app";
+    if (origin.includes("peoplepulse-n-8650.vercel.app")) {
+      origin = "https://peoplepulse-app.vercel.app";
+    }
+    const redirectUrl = `${origin.replace(/\/$/, "")}/#email-confirmed`;
+
+    // 1. Dispatch via high-deliverability Brevo Edge Function
+    try {
+      const { data: fnData, error: fnError } = await supabase.functions.invoke("send-verification-email", {
+        body: {
+          email: cleanEmail,
+          password,
+          name: metadata?.name || cleanEmail.split("@")[0],
+          redirectTo: redirectUrl,
+        },
+      });
+
+      if (!fnError && fnData?.user) {
+        return {
+          user: fnData.user,
+          session: null,
+          status: fnData.status,
+        };
+      }
+
+      if (fnError) {
+        if (fnError.context) {
+          try {
+            const errBody = await fnError.context.json();
+            if (errBody?.error) {
+              throw new Error(errBody.error);
+            }
+          } catch (jsonErr) {
+            if (jsonErr.message && !jsonErr.message.includes("FunctionsHttpError")) {
+              throw jsonErr;
+            }
+          }
+        }
+        console.warn("[signUp] Edge Function notice:", fnError);
+      }
+    } catch (fnEx) {
+      if (fnEx.message && !fnEx.message.includes("FunctionsHttpError") && !fnEx.message.includes("Failed to send")) {
+        throw fnEx;
+      }
+      console.warn("[signUp] Edge Function exception, falling back to native auth:", fnEx);
+    }
+
+    // 2. Fallback to native Supabase Auth signUp
     const { data, error } = await supabase.auth.signUp({
-      email,
+      email: cleanEmail,
       password,
       options: {
         data: metadata,
+        emailRedirectTo: redirectUrl,
+      },
+    });
+    if (error) throw error;
+    return data;
+  };
+
+  const verifyEmailOtp = async (email, token) => {
+    if (!isSupabaseConfigured || !supabase) {
+      throw new Error("Supabase is not configured yet with valid credentials.");
+    }
+    const { data, error } = await supabase.auth.verifyOtp({
+      email: email.trim().toLowerCase(),
+      token: token.trim(),
+      type: "signup",
+    });
+    if (error) throw error;
+    if (data?.user) {
+      const userProfile = await fetchProfile(data.user.id);
+      return { user: data.user, profile: userProfile };
+    }
+    return data;
+  };
+
+  const resendVerificationEmail = async (email) => {
+    if (!isSupabaseConfigured || !supabase) {
+      throw new Error("Supabase is not configured yet with valid credentials.");
+    }
+    const cleanEmail = email.trim().toLowerCase();
+    let origin = typeof window !== "undefined" && window.location?.origin
+      ? window.location.origin
+      : "https://peoplepulse-app.vercel.app";
+    if (origin.includes("peoplepulse-n-8650.vercel.app")) {
+      origin = "https://peoplepulse-app.vercel.app";
+    }
+    const redirectUrl = `${origin.replace(/\/$/, "")}/#email-confirmed`;
+
+    // 1. Dispatch via high-deliverability Brevo Edge Function
+    try {
+      const { data: fnData, error: fnError } = await supabase.functions.invoke("send-verification-email", {
+        body: {
+          email: cleanEmail,
+          redirectTo: redirectUrl,
+        },
+      });
+
+      if (!fnError && (fnData?.status === "sent" || fnData?.user)) {
+        return fnData;
+      }
+
+      if (fnError) {
+        if (fnError.context) {
+          try {
+            const errBody = await fnError.context.json();
+            if (errBody?.error) {
+              throw new Error(errBody.error);
+            }
+          } catch (jsonErr) {
+            if (jsonErr.message && !jsonErr.message.includes("FunctionsHttpError")) {
+              throw jsonErr;
+            }
+          }
+        }
+        console.warn("[resendVerificationEmail] Edge Function notice:", fnError);
+      }
+    } catch (fnEx) {
+      if (fnEx.message && !fnEx.message.includes("FunctionsHttpError") && !fnEx.message.includes("Failed to send")) {
+        throw fnEx;
+      }
+      console.warn("[resendVerificationEmail] Edge Function exception, falling back to native auth:", fnEx);
+    }
+
+    // 2. Fallback to native Supabase Auth resend
+    const { data, error } = await supabase.auth.resend({
+      type: "signup",
+      email: cleanEmail,
+      options: {
+        emailRedirectTo: redirectUrl,
       },
     });
     if (error) throw error;
@@ -356,6 +485,8 @@ export function AuthProvider({ children }) {
         isPasswordRecovery,
         setIsPasswordRecovery,
         signUp,
+        verifyEmailOtp,
+        resendVerificationEmail,
         signIn,
         signOut,
         deleteAccount,
