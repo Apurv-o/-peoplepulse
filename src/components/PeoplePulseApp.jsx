@@ -4335,12 +4335,14 @@ function AdminEmployees({ setMobileOpen }) {
         .select(`
           id,
           role,
+          employee_id,
           joined_at,
           user_id,
           profiles (
             id,
             name,
-            email
+            email,
+            employee_id
           )
         `)
         .eq("organization_id", activeOrganizationId)
@@ -4734,8 +4736,11 @@ function AdminEmployees({ setMobileOpen }) {
 
   const filteredMembers = members.filter((m) => {
     const p = m.profiles || {};
-    const nameMatch = (p.name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
-                      (p.email || "").toLowerCase().includes(searchTerm.toLowerCase());
+    const empId = (m.employee_id || p.employee_id || "").toLowerCase();
+    const term = searchTerm.toLowerCase();
+    const nameMatch = (p.name || "").toLowerCase().includes(term) ||
+                      (p.email || "").toLowerCase().includes(term) ||
+                      empId.includes(term);
     const roleMatch = roleFilter === "all" || m.role === roleFilter;
     return nameMatch && roleMatch;
   });
@@ -4962,7 +4967,7 @@ function AdminEmployees({ setMobileOpen }) {
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg border flex-1 min-w-[180px]" style={{ borderColor: T.border }}>
             <Search size={14} style={{ color: T.muted }} />
             <input
-              placeholder="Search members by name or email..."
+              placeholder="Search members by name, email, or employee ID..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="text-sm outline-none w-full bg-transparent"
@@ -4986,7 +4991,7 @@ function AdminEmployees({ setMobileOpen }) {
           <table className="w-full text-sm min-w-[640px]">
             <thead>
               <tr className="text-left" style={{ color: T.muted }}>
-                {["Member", "Role", "Assigned Team", "Status", "Joined", "Actions"].map((h) => (
+                {["Member", "Employee ID", "Role", "Assigned Team", "Status", "Joined", "Actions"].map((h) => (
                   <th key={h} className="px-4 py-3 font-medium text-xs">{h}</th>
                 ))}
               </tr>
@@ -5002,6 +5007,16 @@ function AdminEmployees({ setMobileOpen }) {
                     <td className="px-4 py-3">
                       <p className="font-medium" style={{ color: T.text }}>{p.name || "Team Member"}</p>
                       <p className="text-xs" style={{ color: T.muted }}>{p.email || m.user_id}</p>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      {m.employee_id || p.employee_id ? (
+                        <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded border bg-slate-50 text-slate-700 border-slate-200 inline-flex items-center gap-1">
+                          <span className="text-[10px] text-slate-400 select-none">#</span>
+                          {m.employee_id || p.employee_id}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-400 italic font-mono">-</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <span className={`capitalize font-medium text-xs px-2.5 py-1 rounded-full ${
