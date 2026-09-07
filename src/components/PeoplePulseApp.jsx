@@ -806,7 +806,7 @@ export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoT
       } else {
         const identifier = (mode === "employee" ? (employeeId || email) : email).trim();
         if (!identifier) {
-          setAuthError(mode === "employee" ? "Please enter your Employee ID." : "Please enter your work email or Employee ID.");
+          setAuthError(mode === "employee" ? "Please enter your Employee ID or work email." : "Please enter your work email or Employee ID.");
           setLoading(false);
           return;
         }
@@ -818,7 +818,7 @@ export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoT
       console.error("[Auth Error]", err);
       const msg = err.message || "";
       if (msg.toLowerCase().includes("email not confirmed") || msg.toLowerCase().includes("email_not_confirmed")) {
-        const targetEmail = (mode === "employee" ? (employeeId || email) : email).trim().toLowerCase();
+        const targetEmail = (err.resolvedEmail || (mode === "employee" ? (employeeId || email) : email)).trim().toLowerCase();
         setPendingVerificationEmail(targetEmail);
         setVerificationCode("");
         setAuthError("Your email has not been verified yet. Please enter the 6-digit verification code from your email or click the link sent to your inbox.");
@@ -1036,7 +1036,7 @@ export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoT
                 {mode === "signup"
                   ? "Set up a new workspace for your company. You will be the organization owner."
                   : mode === "employee"
-                  ? "Welcome back. Enter your Employee ID to access your daily check-in and dashboard."
+                  ? "Welcome back. Enter your Employee ID or work email to access your daily check-in and dashboard."
                   : "Welcome back. Access your daily check-ins and team pulse analytics."}
               </p>
 
@@ -1073,20 +1073,20 @@ export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoT
                 {mode === "employee" ? (
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-xs font-semibold block" style={{ color: T.text }}>Employee ID</label>
+                      <label className="text-xs font-semibold block" style={{ color: T.text }}>Employee ID or Work Email</label>
                       <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100">
-                        e.g. EMP-ENG-01
+                        e.g. EMP-ENG-01 or you@company.com
                       </span>
                     </div>
                     <div className="relative">
                       <input
                         type="text"
                         value={employeeId}
-                        onChange={(e) => setEmployeeId(e.target.value.toUpperCase())}
-                        placeholder="EMP-ENG-01"
+                        onChange={(e) => setEmployeeId(e.target.value)}
+                        placeholder="EMP-ENG-01 or you@company.com"
                         required
                         autoFocus
-                        className="w-full px-3.5 py-2.5 rounded-xl border text-sm outline-none focus:ring-2 bg-white transition-all font-mono font-medium uppercase placeholder:font-sans placeholder:normal-case"
+                        className="w-full px-3.5 py-2.5 rounded-xl border text-sm outline-none focus:ring-2 bg-white transition-all placeholder:text-gray-400"
                         style={{ borderColor: T.border }}
                       />
                     </div>

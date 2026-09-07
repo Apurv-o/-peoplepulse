@@ -276,14 +276,17 @@ export function AuthProvider({ children }) {
 
     const authEmail = await resolveIdentifierToEmail(identifier);
     if (!authEmail.includes("@")) {
-      throw new Error(`No registered account found matching Employee ID "${identifier}". Please check your ID or use your work email.`);
+      throw new Error(`No registered account found matching "${identifier}". Please check your Employee ID or work email.`);
     }
 
     const { data, error } = await supabase.auth.signInWithPassword({
       email: authEmail,
       password,
     });
-    if (error) throw error;
+    if (error) {
+      error.resolvedEmail = authEmail;
+      throw error;
+    }
     if (data?.user) {
       const userProfile = await fetchProfile(data.user.id);
       return { user: data.user, profile: userProfile };
