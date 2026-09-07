@@ -28,18 +28,43 @@
 
 /* Custom modern scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb {
-  background: #D1D5DB;
+  background: #CBD5E1;
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #9CA3AF;
+  background: #94A3B8;
+}
+
+/* Dedicated prominent bottom & side scrollbar for data tables */
+.table-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #94A3B8 #EEF2F6;
+  -webkit-overflow-scrolling: touch;
+}
+.table-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 10px; /* High-visibility bottom horizontal scrollbar */
+}
+.table-scrollbar::-webkit-scrollbar-track {
+  background: #EEF2F6;
+  border-radius: 8px;
+  margin: 0 4px 4px 4px;
+}
+.table-scrollbar::-webkit-scrollbar-thumb {
+  background: #94A3B8;
+  border-radius: 8px;
+  border: 2px solid #EEF2F6;
+}
+.table-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #64748B;
 }
 
 /* Modal animation utilities */

@@ -6049,13 +6049,17 @@ function AdminEmployees({ setMobileOpen }) {
           </select>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[640px]">
-            <thead>
-              <tr className="text-left" style={{ color: T.muted }}>
-                {["Member", "Employee ID", "Role", "Assigned Team", "Status", "Joined", "Actions"].map((h) => (
-                  <th key={h} className="px-4 py-3 font-medium text-xs">{h}</th>
-                ))}
+        <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-270px)] min-h-[380px] table-scrollbar">
+          <table className="w-full text-sm min-w-[1060px] border-collapse">
+            <thead className="sticky top-0 z-20 shadow-xs" style={{ background: "#FAFAF9" }}>
+              <tr className="text-left border-b" style={{ borderColor: T.border, color: T.muted }}>
+                <th className="px-4 py-3 font-semibold text-xs whitespace-nowrap min-w-[240px]">Member</th>
+                <th className="px-4 py-3 font-semibold text-xs whitespace-nowrap min-w-[130px]">Employee ID</th>
+                <th className="px-4 py-3 font-semibold text-xs whitespace-nowrap min-w-[110px]">Role</th>
+                <th className="px-4 py-3 font-semibold text-xs whitespace-nowrap min-w-[190px]">Assigned Team</th>
+                <th className="px-4 py-3 font-semibold text-xs whitespace-nowrap min-w-[90px]">Status</th>
+                <th className="px-4 py-3 font-semibold text-xs whitespace-nowrap min-w-[110px]">Joined</th>
+                <th className="px-4 py-3 font-semibold text-xs whitespace-nowrap min-w-[200px] text-right pr-6">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -6135,19 +6139,19 @@ function AdminEmployees({ setMobileOpen }) {
                     <td className="px-4 py-3 text-xs" style={{ color: T.muted }}>
                       {(m.joined_at || m.created_at) ? new Date(m.joined_at || m.created_at).toLocaleDateString() : "—"}
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1.5">
+                    <td className="px-4 py-3 whitespace-nowrap text-right pr-6">
+                      <div className="flex items-center justify-end gap-2 shrink-0">
                         <button
                           type="button"
                           onClick={() => setSelectedEmployeeForHistory(m)}
                           title={`View ${p.name || "employee"}'s daily pulse & stress tracking`}
-                          className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border text-[#4E6ABF] bg-blue-50/50 hover:bg-blue-100/70 border-blue-200 flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95 shrink-0"
+                          className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border text-[#4E6ABF] bg-blue-50/50 hover:bg-blue-100/70 border-blue-200 flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95 shrink-0 whitespace-nowrap"
                         >
                           <Activity size={12} className="text-[#4E6ABF]" />
                           <span>Daily Pulse</span>
                         </button>
                         {isOwner ? (
-                          <span className="text-xs text-gray-400 italic px-2 py-1 select-none">
+                          <span className="text-xs text-gray-400 italic px-2 py-1 select-none whitespace-nowrap">
                             Owner
                           </span>
                         ) : (
@@ -6155,7 +6159,7 @@ function AdminEmployees({ setMobileOpen }) {
                             onClick={() => handleRemoveMember(m)}
                             disabled={isRemoving}
                             title={`Remove ${p.name || p.email || "employee"} from organization`}
-                            className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border text-red-600 hover:bg-red-50 hover:border-red-300 flex items-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer"
+                            className="text-xs font-semibold px-2.5 py-1.5 rounded-lg border text-red-600 hover:bg-red-50 hover:border-red-300 flex items-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer shrink-0 whitespace-nowrap"
                             style={{ borderColor: T.border }}
                           >
                             {isRemoving ? (
@@ -6178,7 +6182,7 @@ function AdminEmployees({ setMobileOpen }) {
               })}
               {filteredMembers.length === 0 && !loading && (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-sm text-gray-500">
+                  <td colSpan={7} className="p-8 text-center text-sm text-gray-500">
                     No members matched your search criteria.
                   </td>
                 </tr>
@@ -6227,12 +6231,12 @@ function AdminEmployees({ setMobileOpen }) {
             </div>
           )}
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[680px]">
+          <div className="overflow-x-auto table-scrollbar">
+            <table className="w-full text-sm min-w-[860px]">
               <thead>
                 <tr className="text-left" style={{ color: T.muted }}>
                   {["Invited Email", "Role", "Assigned Team", "Expires", "Status", "Actions"].map((h) => (
-                    <th key={h} className="px-4 py-3 font-medium text-xs">{h}</th>
+                    <th key={h} className="px-4 py-3 font-medium text-xs whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
