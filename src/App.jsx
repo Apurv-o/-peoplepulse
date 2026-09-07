@@ -87,6 +87,8 @@ function AppContent() {
       window.location.hash = "#app";
     } else if (screen === "login" && currentHash !== "#login") {
       window.location.hash = "#login";
+    } else if (screen === "employee-login" && currentHash !== "#employee-login") {
+      window.location.hash = "#employee-login";
     } else if (screen === "signup" && currentHash !== "#signup") {
       window.location.hash = "#signup";
     } else if (screen === "onboarding" && currentHash !== "#onboarding") {
@@ -147,7 +149,7 @@ function AppContent() {
       }
 
       // If on login or signup screen and authenticated, forward to app
-      if (currentScreen === "login" || currentScreen === "signup" || hash === "#login" || hash === "#signup") {
+      if (currentScreen === "login" || currentScreen === "signup" || currentScreen === "employee-login" || hash === "#login" || hash === "#signup" || hash === "#employee-login") {
         setCurrentScreen("app");
         syncHashToScreen("app");
       }
@@ -187,6 +189,13 @@ function AppContent() {
         } else {
           setCurrentScreen("signup");
         }
+      } else if (hash === "#employee-login") {
+        if (userRef.current && !isDemoModeRef.current) {
+          setCurrentScreen("app");
+          syncHashToScreen("app");
+        } else {
+          setCurrentScreen("employee-login");
+        }
       } else if (hash === "#login") {
         if (userRef.current && !isDemoModeRef.current) {
           setCurrentScreen("app");
@@ -215,7 +224,7 @@ function AppContent() {
     if (role) setDemoRole(role);
 
     let targetScreen = screen;
-    if ((targetScreen === "login" || targetScreen === "signup") && userRef.current && !options.isDemo) {
+    if ((targetScreen === "login" || targetScreen === "signup" || targetScreen === "employee-login") && userRef.current && !options.isDemo) {
       targetScreen = "app";
     }
 
@@ -301,11 +310,11 @@ function AppContent() {
     );
   }
 
-  // 3. Login / Signup View
-  if (currentScreen === "login" || currentScreen === "signup") {
+  // 3. Login / Signup / Employee Login View
+  if (currentScreen === "login" || currentScreen === "signup" || currentScreen === "employee-login") {
     return (
       <LoginView
-        initialMode={currentScreen === "signup" ? "signup" : "login"}
+        initialMode={currentScreen === "signup" ? "signup" : currentScreen === "employee-login" ? "employee" : "login"}
         onSignIn={(role, meta) => navigateTo("app", role, meta)}
         onReturnHome={() => navigateTo("homepage")}
         onGoToSignup={() => navigateTo("signup")}
@@ -358,6 +367,7 @@ function AppContent() {
   return (
     <PeoplePulseHomepage
       onSignIn={() => navigateTo("login")}
+      onEmployeeSignIn={() => navigateTo("employee-login")}
       onGetStarted={() => navigateTo("signup")}
     />
   );

@@ -119,12 +119,39 @@ export function AuthProvider({ children }) {
     return data;
   };
 
-  const signIn = async (email, password) => {
+  const resolveIdentifierToEmail = async (rawIdentifier) => {
+    const input = (rawIdentifier || "").trim();
+    if (!input) return "";
+    if (input.includes("@")) return input.toLowerCase();
+
+    try {
+      const { data: resolved, error: rpcErr } = await supabase.rpc("resolve_login_identifier", {
+        p_identifier: input,
+      });
+      if (!rpcErr && resolved && resolved.includes("@")) {
+        return resolved.toLowerCase();
+      }
+      if (rpcErr) {
+        console.warn("[resolveIdentifierToEmail] RPC notice:", rpcErr.message);
+      }
+    } catch (e) {
+      console.warn("[resolveIdentifierToEmail] Exception:", e.message);
+    }
+    return input;
+  };
+
+  const signIn = async (identifier, password) => {
     if (!isSupabaseConfigured || !supabase) {
       throw new Error("Supabase is not configured yet with valid credentials.");
     }
+
+    const authEmail = await resolveIdentifierToEmail(identifier);
+    if (!authEmail.includes("@")) {
+      throw new Error(`No registered account found matching Employee ID "${identifier}". Please check your ID or use your work email.`);
+    }
+
     const { data, error } = await supabase.auth.signInWithPassword({
-      email,
+      email: authEmail,
       password,
     });
     if (error) throw error;
@@ -145,11 +172,11 @@ export function AuthProvider({ children }) {
     setRole(null);
   };
 
-  const resetPassword = async (email) => {
+  const resetPassword = async (emailOrEmpId) => {
     if (!isSupabaseConfigured || !supabase) {
       throw new Error("Supabase is not configured yet with valid credentials.");
     }
-    const cleanEmail = email.trim().toLowerCase();
+    const cleanEmail = await resolveIdentifierToEmail(emailOrEmpId);
     let origin = typeof window !== "undefined" && window.location?.origin
       ? window.location.origin
       : "https://peoplepulse-app.vercel.app";

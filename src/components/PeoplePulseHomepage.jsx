@@ -259,7 +259,7 @@ function SectionHeading({ eyebrow, title, sub, center = false }) {
 /* ============================================================
    NAVBAR
    ============================================================ */
-function Navbar({ onSignIn, onGetStarted }) {
+function Navbar({ onSignIn, onEmployeeSignIn, onGetStarted }) {
   const [open, setOpen] = useState(false);
 
   const scrollTo = (id) => {
@@ -300,15 +300,22 @@ function Navbar({ onSignIn, onGetStarted }) {
           </button>
         </div>
 
-        <div className="hidden md:flex items-center gap-3">
+        <div className="hidden md:flex items-center gap-2.5">
           <button
             onClick={onSignIn}
-            className="text-sm font-medium px-3.5 py-2 rounded-lg hover:bg-[#EEF1FA]/60 transition-colors"
+            className="text-sm font-medium px-3 py-1.5 rounded-lg hover:bg-[#EEF1FA]/60 transition-colors"
             style={{ color: T.text }}
           >
             Sign in
           </button>
-          <PrimaryButton onClick={onGetStarted} className="!py-2 !px-4 text-xs font-semibold">
+          <button
+            onClick={onEmployeeSignIn || onSignIn}
+            className="text-xs font-semibold px-3 py-1.5 rounded-lg border hover:bg-white transition-colors"
+            style={{ borderColor: T.border, color: T.primary }}
+          >
+            Employee Login
+          </button>
+          <PrimaryButton onClick={onGetStarted} className="!py-1.5 !px-3.5 text-xs font-semibold">
             Get started
           </PrimaryButton>
         </div>
@@ -340,8 +347,11 @@ function Navbar({ onSignIn, onGetStarted }) {
             Privacy
           </button>
           <div className="h-px my-1" style={{ background: T.border }} />
-          <button onClick={() => { setOpen(false); onSignIn(); }} className="text-left py-1.5 font-medium" style={{ color: T.primary }}>
-            Sign in
+          <button onClick={() => { setOpen(false); (onEmployeeSignIn || onSignIn)(); }} className="text-left py-1.5 font-medium" style={{ color: T.primary }}>
+            Employee Login (with Employee ID)
+          </button>
+          <button onClick={() => { setOpen(false); onSignIn(); }} className="text-left py-1.5 font-medium" style={{ color: T.text }}>
+            Sign in (Work Email)
           </button>
           <PrimaryButton onClick={() => { setOpen(false); onGetStarted(); }} className="justify-center">
             Get started
@@ -1022,6 +1032,9 @@ function Footer({ onSignIn }) {
           <button onClick={() => scrollTo("insights")} className="hover:text-[#1F2A28] transition-colors">
             Insights
           </button>
+          <button onClick={onEmployeeSignIn || onSignIn} className="hover:text-[#4E6ABF] transition-colors">
+            Employee Login
+          </button>
           <button onClick={onSignIn} className="hover:text-[#4E6ABF] transition-colors">
             Sign in
           </button>
@@ -1037,13 +1050,14 @@ function Footer({ onSignIn }) {
 /* ============================================================
    ROOT HOMEPAGE COMPONENT
    ============================================================ */
-export default function PeoplePulseHomepage({ onSignIn, onGetStarted }) {
+export default function PeoplePulseHomepage({ onSignIn, onEmployeeSignIn, onGetStarted }) {
   const handleSignIn = onSignIn || (() => console.log("Sign in clicked"));
+  const handleEmployeeSignIn = onEmployeeSignIn || handleSignIn;
   const handleGetStarted = onGetStarted || handleSignIn;
 
   return (
     <div style={{ background: T.bg, fontFamily: "Inter, system-ui, sans-serif", color: T.text }}>
-      <Navbar onSignIn={handleSignIn} onGetStarted={handleGetStarted} />
+      <Navbar onSignIn={handleSignIn} onEmployeeSignIn={handleEmployeeSignIn} onGetStarted={handleGetStarted} />
       <Hero onSignIn={handleSignIn} onGetStarted={handleGetStarted} />
       <TrustStrip />
       <ProblemSection />

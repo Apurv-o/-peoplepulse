@@ -597,9 +597,10 @@ function Dropdown({ label }) {
    ============================================================ */
 export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoToSignup, onGoToLogin }) {
   const { signIn, signUp, resetPassword, requestPasswordReset, verifyAndUpdatePassword, isConfigured } = useAuth();
-  const [mode, setMode] = useState(initialMode); // 'login' | 'signup'
+  const [mode, setMode] = useState(initialMode); // 'login' | 'employee' | 'signup'
   const [name, setName] = useState("");
   const [email, setEmail] = useState("sarah.patel@company.com");
+  const [employeeId, setEmployeeId] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -622,7 +623,7 @@ export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoT
   const [forgotSuccess, setForgotSuccess] = useState(null);
 
   const handleOpenForgotPassword = () => {
-    setForgotEmail(email || "");
+    setForgotEmail(mode === "employee" ? (employeeId || email || "") : (email || ""));
     setResetCode("");
     setGeneratedCode(null);
     setNewPassword("");
@@ -742,7 +743,13 @@ export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoT
           }
         }
       } else {
-        const result = await signIn(email, password);
+        const identifier = (mode === "employee" ? (employeeId || email) : email).trim();
+        if (!identifier) {
+          setAuthError(mode === "employee" ? "Please enter your Employee ID." : "Please enter your work email or Employee ID.");
+          setLoading(false);
+          return;
+        }
+        const result = await signIn(identifier, password);
         const userRole = result?.profile?.role || "employee";
         onSignIn?.(userRole, { isDemo: false, profile: result?.profile });
       }
@@ -831,6 +838,15 @@ export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoT
             </button>
             <button
               type="button"
+              onClick={() => { setMode("employee"); setAuthError(null); }}
+              className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all duration-200 ${
+                mode === "employee" ? "bg-white text-[#1F2A28] shadow-sm" : "text-gray-500 hover:text-gray-900"
+              }`}
+            >
+              Employee Login
+            </button>
+            <button
+              type="button"
               onClick={() => { setMode("signup"); setAuthError(null); }}
               className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all duration-200 ${
                 mode === "signup" ? "bg-white text-[#1F2A28] shadow-sm" : "text-gray-500 hover:text-gray-900"
@@ -841,11 +857,17 @@ export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoT
           </div>
 
           <h2 className="text-2xl font-bold tracking-tight" style={{ color: T.text }}>
-            {mode === "signup" ? "Create your organization" : "Sign in to your account"}
+            {mode === "signup"
+              ? "Create your organization"
+              : mode === "employee"
+              ? "Employee Portal Sign In"
+              : "Sign in to your account"}
           </h2>
           <p className="text-sm mt-1.5 mb-6 leading-relaxed" style={{ color: T.muted }}>
             {mode === "signup"
               ? "Set up a new workspace for your company. You will be the organization owner."
+              : mode === "employee"
+              ? "Welcome back. Enter your Employee ID to access your daily check-in and dashboard."
               : "Welcome back. Access your daily check-ins and team pulse analytics."}
           </p>
 
@@ -878,22 +900,49 @@ export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoT
                 />
               </div>
             )}
-            <div>
-              <label className="text-xs font-semibold block mb-1.5" style={{ color: T.text }}>Work Email</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@company.com"
-                required
-                className="w-full px-3.5 py-2.5 rounded-xl border text-sm outline-none focus:ring-2 bg-white transition-all"
-                style={{ borderColor: T.border }}
-              />
-            </div>
+
+            {mode === "employee" ? (
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold block" style={{ color: T.text }}>Employee ID</label>
+                  <span className="text-[10px] font-mono font-medium px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-100">
+                    e.g. EMP-ENG-01
+                  </span>
+                </div>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={employeeId}
+                    onChange={(e) => setEmployeeId(e.target.value.toUpperCase())}
+                    placeholder="EMP-ENG-01"
+                    required
+                    autoFocus
+                    className="w-full px-3.5 py-2.5 rounded-xl border text-sm outline-none focus:ring-2 bg-white transition-all font-mono font-medium uppercase placeholder:font-sans placeholder:normal-case"
+                    style={{ borderColor: T.border }}
+                  />
+                </div>
+              </div>
+            ) : (
+              <div>
+                <label className="text-xs font-semibold block mb-1.5" style={{ color: T.text }}>
+                  {mode === "signup" ? "Work Email" : "Work Email"}
+                </label>
+                <input
+                  type={mode === "signup" ? "email" : "text"}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@company.com"
+                  required
+                  className="w-full px-3.5 py-2.5 rounded-xl border text-sm outline-none focus:ring-2 bg-white transition-all"
+                  style={{ borderColor: T.border }}
+                />
+              </div>
+            )}
+
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="text-xs font-semibold block" style={{ color: T.text }}>Password</label>
-                {mode === "login" && (
+                {mode !== "signup" && (
                   <button
                     type="button"
                     onClick={handleOpenForgotPassword}
@@ -936,7 +985,13 @@ export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoT
               className="w-full py-3 rounded-xl text-sm font-semibold text-white mt-2 transition-all hover:shadow-lg active:translate-y-0.5 disabled:opacity-50 flex items-center justify-center gap-2"
               style={{ background: T.primary }}
             >
-              {loading ? "Processing..." : mode === "signup" ? "Continue to Organization Setup →" : "Sign in to Dashboard →"}
+              {loading
+                ? "Processing..."
+                : mode === "signup"
+                ? "Continue to Organization Setup →"
+                : mode === "employee"
+                ? "Sign in as Employee →"
+                : "Sign in to Dashboard →"}
             </button>
           </form>
 
