@@ -134,6 +134,18 @@ function AppContent() {
         return;
       }
 
+      const effectiveRole = activeRole || profile?.role || serverRole || "employee";
+      const isEmployee = effectiveRole === "employee";
+
+      // If user is an employee, NEVER send them to organization onboarding
+      if (isEmployee) {
+        if (currentScreen !== "app") {
+          setCurrentScreen("app");
+          syncHashToScreen("app");
+        }
+        return;
+      }
+
       // If user has organizations, ensure they are NOT stuck in onboarding
       if (organizations.length > 0 && currentScreen === "onboarding") {
         setCurrentScreen("app");
@@ -141,20 +153,24 @@ function AppContent() {
         return;
       }
 
-      // If user has 0 organizations, prompt onboarding
-      if (organizations.length === 0 && !isDemoModeRef.current) {
-        setCurrentScreen("onboarding");
-        syncHashToScreen("onboarding");
+      // If on login or signup screen and authenticated, forward to app or onboarding
+      if (currentScreen === "login" || currentScreen === "signup" || currentScreen === "employee-login" || hash === "#login" || hash === "#signup" || hash === "#employee-login") {
+        if (organizations.length === 0 && !isDemoModeRef.current && (currentScreen === "signup" || hash === "#signup" || effectiveRole === "admin")) {
+          setCurrentScreen("onboarding");
+          syncHashToScreen("onboarding");
+          return;
+        }
+        setCurrentScreen("app");
+        syncHashToScreen("app");
         return;
       }
 
-      // If on login or signup screen and authenticated, forward to app
-      if (currentScreen === "login" || currentScreen === "signup" || currentScreen === "employee-login" || hash === "#login" || hash === "#signup" || hash === "#employee-login") {
-        setCurrentScreen("app");
-        syncHashToScreen("app");
+      // If user has 0 organizations, prompt onboarding only for non-employees on onboarding route
+      if (organizations.length === 0 && !isDemoModeRef.current && currentScreen === "onboarding") {
+        return;
       }
     }
-  }, [user, authLoading, orgLoading, organizations.length, currentScreen, isPasswordRecovery, isDemoMode]);
+  }, [user, authLoading, orgLoading, organizations.length, currentScreen, isPasswordRecovery, isDemoMode, profile?.role, serverRole, activeRole]);
 
   // Handle URL hash changes (back/forward navigation or direct links)
   useEffect(() => {
@@ -288,8 +304,8 @@ function AppContent() {
 
   // 2. Organization Onboarding View
   if (currentScreen === "onboarding") {
-    if (organizations.length > 0) {
-      const effectiveRole = isDemoMode ? demoRole : (activeRole || serverRole || "employee");
+    const effectiveRole = isDemoMode ? demoRole : (activeRole || profile?.role || serverRole || "employee");
+    if (organizations.length > 0 || effectiveRole === "employee") {
       return (
         <PeoplePulseApp
           role={effectiveRole}
