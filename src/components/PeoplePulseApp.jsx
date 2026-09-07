@@ -5,7 +5,7 @@ import { useAuth } from "../lib/auth";
 import { useOrganization } from "../lib/organization";
 import { supabase, isSupabaseConfigured } from "../lib/supabase";
 import { calculateEngagementScore } from "../lib/engagementScoring";
-import { getCurrentWeekMonday, formatWeekLabel, getTodayDate } from "../lib/dateUtils";
+import { getCurrentWeekMonday, formatWeekLabel, getTodayDate, getCurrentWeekSaturday, getSaturdayCycleRange } from "../lib/dateUtils";
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell,
   BarChart, Bar, CartesianGrid,
@@ -3981,13 +3981,29 @@ function AdminInsights({ setMobileOpen }) {
       .subscribe((status) => { setIsLiveActive(status === "SUBSCRIBED"); });
 
     const interval = setInterval(() => { if (document.visibilityState === "visible") loadOrgInsights(); }, 15000);
-    return () => { supabase.removeChannel(channel); clearInterval(interval); };
+
+    // Automatic Saturday Midnight Rollover: Refresh insights when cycle resets at 12:00 AM Saturday
+    const now = new Date();
+    const currentDay = now.getDay();
+    const daysUntilNextSat = currentDay === 6 ? 7 : (6 - currentDay);
+    const nextSaturdayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + daysUntilNextSat, 0, 0, 1);
+    const msUntilSatMidnight = Math.max(1000, nextSaturdayMidnight.getTime() - now.getTime());
+    const saturdayResetTimer = setTimeout(() => {
+      loadOrgInsights();
+    }, msUntilSatMidnight);
+
+    return () => {
+      supabase.removeChannel(channel);
+      clearInterval(interval);
+      clearTimeout(saturdayResetTimer);
+    };
   }, [activeOrganizationId, loadOrgInsights]);
 
   const aiFeedback = orgData ? generateAIGrowthFeedback(orgData, allTeamInsights) : [];
   const selectedTeamData = allTeamInsights.find((t) => t.team_id === selectedTeamId);
   const teamMetrics = teamInsight?.team_metrics;
   const isTeamProtected = teamInsight?.status === "insufficient_team_sample";
+  const satCycle = getSaturdayCycleRange();
 
   const typeStyles = {
     positive: { bg: "bg-emerald-50", border: "border-emerald-200", icon: "text-emerald-600", badge: "bg-emerald-100 text-emerald-800" },
@@ -4000,7 +4016,7 @@ function AdminInsights({ setMobileOpen }) {
     <div>
       <Topbar
         title="Insights & Feedback"
-        subtitle={`AI-powered growth analysis for ${orgName}.`}
+        subtitle={`AI-powered growth analysis for ${orgName} · Weekly Cycle (${satCycle.label}).`}
         setMobileOpen={setMobileOpen}
       />
 
@@ -4020,6 +4036,9 @@ function AdminInsights({ setMobileOpen }) {
             </span>
           )}
           <span className="text-xs text-gray-400">• Last synced: {lastSyncTime.toLocaleTimeString()}</span>
+          <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md font-medium border border-blue-100">
+            Cycle: {satCycle.label} (Resets Sat 12:00 AM)
+          </span>
         </div>
         <div className="flex items-center gap-2">
           <select
@@ -4050,12 +4069,12 @@ function AdminInsights({ setMobileOpen }) {
           <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
             <p className="text-[11px] font-medium text-gray-500 mb-1">Org Engagement</p>
             <p className="text-2xl font-bold text-[#1F2A28]">{orgData.org_score ?? "—"}<span className="text-xs text-gray-400 font-normal">/ 100</span></p>
-            <p className="text-[10px] text-gray-400 mt-1">Across all teams</p>
+            <p className="text-[10px] text-gray-400 mt-1">This week · Resets Sat</p>
           </div>
           <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
-            <p className="text-[11px] font-medium text-gray-500 mb-1">Total Check-ins</p>
+            <p className="text-[11px] font-medium text-gray-500 mb-1">Weekly Check-ins</p>
             <p className="text-2xl font-bold text-[#4E6ABF]">{orgData.total_checkins ?? 0}</p>
-            <p className="text-[10px] text-gray-400 mt-1">All-time submissions</p>
+            <p className="text-[10px] text-gray-400 mt-1">Cycle: {satCycle.label}</p>
           </div>
           <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
             <p className="text-[11px] font-medium text-gray-500 mb-1">Active Teams</p>
@@ -4246,7 +4265,7 @@ function AdminInsights({ setMobileOpen }) {
           <div className="flex items-center justify-between mb-4">
             <div>
               <p className="text-base font-semibold" style={{ color: T.text }}>Team Engagement Comparison</p>
-              <p className="text-xs mt-0.5" style={{ color: T.muted }}>Engagement scores across all teams in {orgName}</p>
+              <p className="text-xs mt-0.5" style={{ color: T.muted }}>Engagement scores across all teams in {orgName} · Cycle: {satCycle.label} (Resets Sat)</p>
             </div>
             <span className="flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/60">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live Realtime
@@ -4413,9 +4432,9 @@ function AdminDashboard({ setMobileOpen }) {
     } catch (err) {
       console.error("Failed to load admin dashboard realtime metrics:", err);
     } finally {
-      setLoadingTeams(false);
-    }
-  }, [activeOrganizationId]);
+        setLoadingTeams(false);
+      }
+    }, [activeOrganizationId]);
 
   useEffect(() => {
     loadDashboardData();
@@ -4488,7 +4507,7 @@ function AdminDashboard({ setMobileOpen }) {
       loadDashboardData();
     }, 10000);
 
-    // Automatic Midnight Rollover: At 12:00 AM, reset daily participation to 0% and refresh metrics
+    // Automatic Midnight Rollover: At 12:00 AM every day, reset daily participation to 0%
     const now = new Date();
     const tomorrowMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 1);
     const msUntilMidnight = Math.max(1000, tomorrowMidnight.getTime() - now.getTime());
@@ -4496,10 +4515,20 @@ function AdminDashboard({ setMobileOpen }) {
       loadDashboardData();
     }, msUntilMidnight);
 
+    // Automatic Saturday Midnight Rollover: At 12:00 AM Saturday, reset weekly engagement data for the new cycle
+    const currentDay = now.getDay(); // 0: Sun, ..., 6: Sat
+    const daysUntilNextSat = currentDay === 6 ? 7 : (6 - currentDay);
+    const nextSaturdayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + daysUntilNextSat, 0, 0, 1);
+    const msUntilSatMidnight = Math.max(1000, nextSaturdayMidnight.getTime() - now.getTime());
+    const saturdayResetTimer = setTimeout(() => {
+      loadDashboardData();
+    }, msUntilSatMidnight);
+
     return () => {
       supabase.removeChannel(channel);
       clearInterval(interval);
       clearTimeout(midnightTimer);
+      clearTimeout(saturdayResetTimer);
     };
   }, [activeOrganizationId, loadDashboardData]);
 
@@ -4519,16 +4548,23 @@ function AdminDashboard({ setMobileOpen }) {
     ? sentimentDistribution
     : (sentimentSplit || []);
 
+  const satCycle = getSaturdayCycleRange();
+
   return (
     <div>
       <Topbar
         title="Organization Overview"
-        subtitle={`${teamCount} active team(s) across ${orgName}, daily cycle.`}
+        subtitle={`${teamCount} active team(s) across ${orgName} · Weekly Cycle (${satCycle.label}).`}
         setMobileOpen={setMobileOpen}
         right={
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/60 text-xs font-medium">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span>Live Realtime</span>
+          <div className="flex items-center gap-2">
+            <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200/60 text-xs font-medium">
+              <span>Weekly Cycle: {satCycle.label}</span>
+            </span>
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/60 text-xs font-medium">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span>Live Realtime</span>
+            </div>
           </div>
         }
       />
@@ -4550,10 +4586,15 @@ function AdminDashboard({ setMobileOpen }) {
         />
         <KPICard
           label="Org. engagement"
-          value={orgEngagementScore !== null ? String(orgEngagementScore) : "76"}
-          unit="/ 100"
-          delta={orgEngagementScore !== null ? (orgEngagementScore >= 60 ? 2.5 : -1.5) : 2.5}
+          value={orgEngagementScore !== null ? String(orgEngagementScore) : "—"}
+          unit={orgEngagementScore !== null ? "/ 100" : "Awaiting data"}
+          delta={orgEngagementScore !== null ? (orgEngagementScore >= 60 ? 2.5 : -1.5) : 0}
           goodDirection="up"
+          extra={
+            <div className="text-[10px] text-gray-500 font-normal">
+              Resets every Saturday
+            </div>
+          }
         />
       </div>
 
@@ -4594,7 +4635,7 @@ function AdminDashboard({ setMobileOpen }) {
             <div>
               <p className="text-base font-semibold" style={{ color: T.text }}>Organization engagement</p>
               <p className="text-xs mt-0.5" style={{ color: T.muted }}>
-                Weekly trend &bull; Live score {orgEngagementScore !== null ? `${orgEngagementScore}%` : (engagementTrendData.length > 0 ? `${engagementTrendData[engagementTrendData.length - 1]?.score}%` : "—")}
+                Cycle: {satCycle.label} &bull; Live score {orgEngagementScore !== null ? `${orgEngagementScore}%` : (engagementTrendData.length > 0 ? `${engagementTrendData[engagementTrendData.length - 1]?.score}%` : "—")}
               </p>
             </div>
             <span className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/60 shadow-xs">
@@ -4642,7 +4683,7 @@ function AdminDashboard({ setMobileOpen }) {
             <div>
               <p className="text-base font-semibold" style={{ color: T.text }}>Team comparison</p>
               <p className="text-xs mt-0.5" style={{ color: T.muted }}>
-                Real-time engagement scores across {teamComparisonData.length} team(s)
+                Weekly cycle ({satCycle.label}) &bull; {teamComparisonData.length} team(s)
               </p>
             </div>
             <span className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/60 shadow-xs">
@@ -4678,7 +4719,7 @@ function AdminDashboard({ setMobileOpen }) {
                   <Tooltip
                     contentStyle={{ borderRadius: 12, border: `1px solid ${T.border}`, fontSize: 13 }}
                     formatter={(val, name, item) => [
-                      `${val} / 100 (${item.payload.total_checkins || 0} check-ins)`,
+                      `${val} / 100 (${item.payload.total_checkins || 0} check-ins this week)`,
                       "Engagement Score"
                     ]}
                   />
@@ -4687,7 +4728,7 @@ function AdminDashboard({ setMobileOpen }) {
               </ResponsiveContainer>
               {teamComparisonData.every(t => (t.total_checkins || 0) === 0) && (
                 <p className="text-[11px] text-center mt-2 italic" style={{ color: T.muted }}>
-                  Awaiting first check-in submissions for this organization. Scores will update live as responses are recorded.
+                  Awaiting first check-in submissions for this weekly cycle. Scores reset every Saturday at 12:00 AM.
                 </p>
               )}
             </div>
@@ -4697,10 +4738,13 @@ function AdminDashboard({ setMobileOpen }) {
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <Card>
           <div className="flex items-center justify-between mb-3">
-            <p className="text-base font-semibold" style={{ color: T.text }}>Sentiment distribution</p>
+            <div>
+              <p className="text-base font-semibold" style={{ color: T.text }}>Sentiment distribution</p>
+              <p className="text-[11px]" style={{ color: T.muted }}>Current weekly cycle ({satCycle.label})</p>
+            </div>
             {sentimentDistribution && sentimentDistribution.length > 0 && (
               <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: T.bg, color: T.muted }}>
-                {totalOrgCheckins || 0} total check-ins
+                {totalOrgCheckins || 0} weekly check-ins
               </span>
             )}
           </div>
