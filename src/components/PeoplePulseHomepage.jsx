@@ -611,10 +611,19 @@ function HowItWorks() {
           />
         </Reveal>
         <div className="relative grid sm:grid-cols-3 gap-8 mt-14">
-          <div className="hidden sm:block absolute top-5 left-[16%] right-[16%] h-px" style={{ background: T.border }} />
           {steps.map((s, i) => (
             <Reveal key={s.n} delay={i * 150}>
               <div className="relative text-center sm:text-left">
+                {/* Connecting line to the next step only (never after the last step 03) */}
+                {i < steps.length - 1 && (
+                  <div
+                    className="hidden sm:block absolute top-5 left-5 h-px pointer-events-none z-0"
+                    style={{
+                      width: "calc(100% + 2rem)",
+                      background: T.border,
+                    }}
+                  />
+                )}
                 <div
                   className="w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold mx-auto sm:mx-0 relative z-10 shadow-sm"
                   style={{ background: T.primary, color: "white" }}
