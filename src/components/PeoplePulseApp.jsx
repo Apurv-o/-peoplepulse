@@ -3770,6 +3770,7 @@ function AdminDashboard({ setMobileOpen }) {
   const [totalOrgCheckins, setTotalOrgCheckins] = useState(null);
   const [sentimentDistribution, setSentimentDistribution] = useState(null);
   const [engagementTrendData, setEngagementTrendData] = useState([]);
+  const [eligibleEmployeeCount, setEligibleEmployeeCount] = useState(null);
 
   const loadDashboardData = useCallback(async () => {
     if (!supabase || !activeOrganizationId) return;
@@ -3779,8 +3780,8 @@ function AdminDashboard({ setMobileOpen }) {
       const utcToday = new Date().toISOString().slice(0, 10);
       const past24hIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
-      // 0. Fetch live team count and active member count directly
-      const [{ count: tCount }, { count: mCount }] = await Promise.all([
+      // 0. Fetch live team count, total member count, and eligible employees count (excluding admin/manager)
+      const [{ count: tCount }, { count: mCount }, { count: eCount }] = await Promise.all([
         supabase
           .from("teams")
           .select("id", { count: "exact", head: true })
@@ -3790,12 +3791,19 @@ function AdminDashboard({ setMobileOpen }) {
           .select("id", { count: "exact", head: true })
           .eq("organization_id", activeOrganizationId)
           .eq("is_active", true),
+        supabase
+          .from("organization_members")
+          .select("id", { count: "exact", head: true })
+          .eq("organization_id", activeOrganizationId)
+          .eq("is_active", true)
+          .not("role", "in", '("admin","manager","owner")'),
       ]);
 
       if (tCount !== null && tCount !== undefined) setLiveTeamCount(tCount);
       if (mCount !== null && mCount !== undefined) setLiveMemberCount(mCount);
+      if (eCount !== null && eCount !== undefined) setEligibleEmployeeCount(eCount);
 
-      // 1. Fetch real-time daily participation (try security-definer RPC first for anonymous + named count)
+      // 1. Fetch real-time daily participation (excludes admin & manager)
       let participationLoaded = false;
       try {
         const { data: partData, error: partErr } = await supabase.rpc(
@@ -3807,8 +3815,11 @@ function AdminDashboard({ setMobileOpen }) {
         );
         if (!partErr && partData && typeof partData.today_checkins === "number") {
           setTodayCheckins(partData.today_checkins);
-          if (typeof partData.active_members === "number" && partData.active_members > 0) {
-            setLiveMemberCount(partData.active_members);
+          if (typeof partData.eligible_members === "number" && partData.eligible_members > 0) {
+            setEligibleEmployeeCount(partData.eligible_members);
+          }
+          if (typeof partData.total_members === "number" && partData.total_members > 0) {
+            setLiveMemberCount(partData.total_members);
           }
           participationLoaded = true;
         }
@@ -3816,7 +3827,7 @@ function AdminDashboard({ setMobileOpen }) {
         // Fall back gracefully to direct query
       }
 
-      // Fallback: Direct query with timezone resiliency (local date, UTC date, or past 24 hours)
+      // Fallback: Direct query with timezone resiliency (excluding admin & manager checkins)
       if (!participationLoaded) {
         try {
           const { count: cCount, error: cErr } = await supabase
@@ -3953,8 +3964,16 @@ function AdminDashboard({ setMobileOpen }) {
     };
   }, [activeOrganizationId, loadDashboardData]);
 
-  const dailyParticipationPct = memberCount > 0 && todayCheckins !== null
-    ? Math.min(100, Math.round((todayCheckins / memberCount) * 100))
+  const participationTarget = eligibleEmployeeCount !== null && eligibleEmployeeCount > 0
+    ? eligibleEmployeeCount
+    : memberCount;
+
+  const displayCheckins = todayCheckins !== null
+    ? Math.min(todayCheckins, participationTarget)
+    : null;
+
+  const dailyParticipationPct = participationTarget > 0 && displayCheckins !== null
+    ? Math.min(100, Math.round((displayCheckins / participationTarget) * 100))
     : (todayCheckins === 0 ? 0 : 67);
 
   const displaySentiment = sentimentDistribution && sentimentDistribution.length > 0
@@ -3980,7 +3999,7 @@ function AdminDashboard({ setMobileOpen }) {
         <KPICard
           label="Daily participation"
           value={todayCheckins !== null ? `${dailyParticipationPct}%` : "0%"}
-          unit={todayCheckins !== null ? `${todayCheckins} / ${memberCount}` : ""}
+          unit={displayCheckins !== null ? `${displayCheckins} / ${participationTarget}` : ""}
           delta={3.5}
           goodDirection="up"
           extra={
