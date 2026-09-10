@@ -47,13 +47,84 @@ Deno.serve(async (req) => {
 
     const userId = user.id;
     const userEmail = (user.email || "").trim().toLowerCase();
-    const userName = user.user_metadata?.name || userEmail.split("@")[0] || "there";
     const deletionTime = new Date().toUTCString();
 
     // 2. Admin client with service_role key to perform permanent deletion
     const adminClient = createClient(supabaseUrl, supabaseServiceKey, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
+
+    // Retrieve user's display name from profiles (with fallback to auth metadata/email)
+    let userName = user.user_metadata?.name || userEmail.split("@")[0] || "there";
+    try {
+      const { data: userProfile } = await adminClient
+        .from("profiles")
+        .select("full_name")
+        .eq("id", userId)
+        .maybeSingle();
+      if (userProfile?.full_name && userProfile.full_name.trim().length > 0) {
+        userName = userProfile.full_name.trim();
+      }
+    } catch (_pErr) {
+      // Fallback already set
+    }
+
+    // Pre-deletion step: Query user's organization memberships and identify active admins/owners
+    // to notify them that this employee/member has deleted their account.
+    interface AdminRecipient {
+      email: string;
+      name: string;
+      orgNames: string[];
+    }
+    const adminRecipientsMap = new Map<string, AdminRecipient>();
+
+    try {
+      const { data: userMemberships } = await adminClient
+        .from("organization_members")
+        .select("organization_id, role, organizations(id, name)")
+        .eq("user_id", userId);
+
+      if (userMemberships && userMemberships.length > 0) {
+        for (const membership of userMemberships) {
+          const orgId = membership.organization_id;
+          const orgData = membership.organizations as any;
+          const orgName = orgData?.name || "your organization";
+
+          // Find active admins and owners of this organization (excluding the deleting user)
+          const { data: orgAdmins } = await adminClient
+            .from("organization_members")
+            .select("user_id, role, profiles(id, email, full_name)")
+            .eq("organization_id", orgId)
+            .in("role", ["owner", "admin"])
+            .eq("is_active", true)
+            .neq("user_id", userId);
+
+          if (orgAdmins && orgAdmins.length > 0) {
+            for (const adminRow of orgAdmins) {
+              const prof = adminRow.profiles as any;
+              const adminEmail = (prof?.email || "").trim().toLowerCase();
+              if (adminEmail && adminEmail !== userEmail) {
+                const adminName = prof?.full_name || adminEmail.split("@")[0] || "Admin";
+                if (adminRecipientsMap.has(adminEmail)) {
+                  const existing = adminRecipientsMap.get(adminEmail)!;
+                  if (!existing.orgNames.includes(orgName)) {
+                    existing.orgNames.push(orgName);
+                  }
+                } else {
+                  adminRecipientsMap.set(adminEmail, {
+                    email: adminEmail,
+                    name: adminName,
+                    orgNames: [orgName],
+                  });
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (lookupErr) {
+      console.warn("[delete-account] Pre-deletion admin lookup warning:", lookupErr);
+    }
 
     // 3. Handle Organizations where this user is an 'owner'
     const { data: ownedMemberships } = await adminClient
@@ -295,6 +366,200 @@ Deno.serve(async (req) => {
           }
         } catch (rErr: any) {
           console.warn("[delete-account] Resend dispatch error:", rErr?.message);
+        }
+      }
+    }
+
+    // 7. Dispatch Notification Email to Organization Admins & Owners
+    if (adminRecipientsMap.size > 0) {
+      console.log(`[delete-account] Notifying ${adminRecipientsMap.size} admin(s) across affected organization(s)...`);
+
+      const escapeHtml = (str: string): string =>
+        (str || "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+
+      const safeUserName = escapeHtml(userName);
+      const safeUserEmail = escapeHtml(userEmail);
+      const teamRosterUrl = "https://peoplepulse-app.vercel.app/#app";
+
+      for (const [adminEmail, adminInfo] of adminRecipientsMap.entries()) {
+        const safeAdminName = escapeHtml(adminInfo.name);
+        const orgNamesList = adminInfo.orgNames.map(escapeHtml).join(", ") || "your organization";
+
+        const adminEmailHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Team Member Account Deletion Notice — PeoplePulse</title>
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f4f6f9; margin: 0; padding: 36px 16px; color: #1f2937; -webkit-font-smoothing: antialiased;">
+  <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 560px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; border: 1px solid #e5e7eb; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05); overflow: hidden;">
+    <tr>
+      <td style="background: linear-gradient(135deg, #4e6abf 0%, #3b5299 100%); height: 6px; padding: 0;"></td>
+    </tr>
+    <tr>
+      <td style="padding: 36px 32px 28px 32px;">
+        <!-- Brand Header -->
+        <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom: 28px;">
+          <tr>
+            <td align="center">
+              <div style="display: inline-block; width: 48px; height: 48px; line-height: 48px; background: #eef2ff; border-radius: 14px; text-align: center; margin-bottom: 12px; border: 1px solid #dbeafe;">
+                <span style="font-size: 22px;">📋</span>
+              </div>
+              <h2 style="margin: 0; color: #4e6abf; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">PeoplePulse</h2>
+              <p style="margin: 4px 0 0 0; color: #6b7280; font-size: 13px; font-weight: 500;">Team Wellbeing &amp; Engagement Platform</p>
+            </td>
+          </tr>
+        </table>
+
+        <!-- Main Title -->
+        <h3 style="margin: 0 0 12px 0; color: #111827; font-size: 20px; font-weight: 700; text-align: center;">Team Roster Update: Member Account Deleted</h3>
+        <p style="margin: 0 0 20px 0; line-height: 1.6; color: #4b5563; font-size: 15px; text-align: center;">
+          Hello <strong>${safeAdminName}</strong>, this automated notice confirms that an employee has permanently deleted their account and has been removed from <strong>${orgNamesList}</strong>.
+        </p>
+
+        <!-- Employee Info Card -->
+        <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 18px 20px; margin: 20px 0;">
+          <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0">
+            <tr>
+              <td style="padding: 4px 0; font-size: 13px; color: #64748b; width: 140px; font-weight: 600;">Employee Name:</td>
+              <td style="padding: 4px 0; font-size: 13px; color: #0f172a; font-weight: 700;">${safeUserName}</td>
+            </tr>
+            <tr>
+              <td style="padding: 4px 0; font-size: 13px; color: #64748b; font-weight: 600;">Email Address:</td>
+              <td style="padding: 4px 0; font-size: 13px; color: #4e6abf; font-weight: 600; font-family: monospace;">${safeUserEmail}</td>
+            </tr>
+            <tr>
+              <td style="padding: 4px 0; font-size: 13px; color: #64748b; font-weight: 600;">Deletion Time:</td>
+              <td style="padding: 4px 0; font-size: 13px; color: #334155;">${deletionTime}</td>
+            </tr>
+          </table>
+        </div>
+
+        <!-- Action Completed Summary Box -->
+        <div style="background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; padding: 18px 20px; margin: 20px 0;">
+          <p style="margin: 0 0 10px 0; font-size: 13px; font-weight: 700; color: #111827;">
+            Roster &amp; Data Impact:
+          </p>
+          <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0">
+            <tr>
+              <td style="padding: 4px 0; font-size: 12px; color: #374151; line-height: 1.5;">
+                <span style="color: #10b981; font-weight: bold; margin-right: 6px;">✓</span>
+                User has been unlinked from your organization roster and team assignments.
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 4px 0; font-size: 12px; color: #374151; line-height: 1.5;">
+                <span style="color: #10b981; font-weight: bold; margin-right: 6px;">✓</span>
+                One organization member seat has been released and is now available for new invites.
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 4px 0; font-size: 12px; color: #374151; line-height: 1.5;">
+                <span style="color: #10b981; font-weight: bold; margin-right: 6px;">✓</span>
+                Historical sentiment &amp; check-in scores remain fully intact and completely anonymous.
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 4px 0; font-size: 12px; color: #374151; line-height: 1.5;">
+                <span style="color: #10b981; font-weight: bold; margin-right: 6px;">✓</span>
+                All active user sessions and workspace credentials were immediately terminated.
+              </td>
+            </tr>
+          </table>
+        </div>
+
+        <!-- Action Button -->
+        <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin: 28px 0;">
+          <tr>
+            <td align="center">
+              <a href="${teamRosterUrl}" target="_blank" style="background: linear-gradient(135deg, #4e6abf 0%, #3b5299 100%); color: #ffffff; padding: 14px 32px; font-size: 15px; font-weight: 700; text-decoration: none; border-radius: 10px; display: inline-block; box-shadow: 0 4px 10px rgba(78, 106, 191, 0.35); text-align: center;">
+                View Updated Team Roster &rarr;
+              </a>
+            </td>
+          </tr>
+        </table>
+
+        <!-- Security / Admin Note -->
+        <div style="background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 12px; padding: 14px 16px; margin: 20px 0; font-size: 12px; color: #1e40af; line-height: 1.5;">
+          <strong style="color: #1e3a8a; display: block; margin-bottom: 4px;">🛡️ Administrator Notice:</strong>
+          This deletion was self-initiated by the employee via their account settings. You can re-invite them at any time should they ever return to the team.
+        </div>
+
+        <!-- Divider & Footer -->
+        <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 28px 0 18px 0;">
+        <p style="margin: 0 0 6px 0; font-size: 11px; color: #9ca3af; text-align: center;">
+          PeoplePulse &bull; Psychological Safety &amp; Confidential Employee Wellbeing Insights
+        </p>
+        <p style="margin: 0; font-size: 10px; color: #9ca3af; text-align: center;">
+          Sent to Organization Administrators &bull; Automated System Dispatch
+        </p>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+        // Send to admin via Brevo REST API
+        let adminEmailSent = false;
+        if (brevoApiKey) {
+          try {
+            const senderEmail = Deno.env.get("BREVO_SENDER_EMAIL") || "cyberworld898@gmail.com";
+            const brevoRes = await fetch("https://api.brevo.com/v3/smtp/email", {
+              method: "POST",
+              headers: {
+                "api-key": brevoApiKey.trim(),
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+              },
+              body: JSON.stringify({
+                sender: { name: "PeoplePulse", email: senderEmail },
+                to: [{ email: adminEmail, name: adminInfo.name }],
+                subject: `Team Member Account Deletion Notice: ${safeUserName} — PeoplePulse`,
+                htmlContent: adminEmailHtml,
+              }),
+            });
+            if (brevoRes.ok) {
+              console.log(`[delete-account] Admin notification delivered to ${adminEmail} via Brevo.`);
+              adminEmailSent = true;
+            } else {
+              const errData = await brevoRes.json();
+              console.warn("[delete-account] Brevo dispatch to admin warning:", errData);
+            }
+          } catch (bErr: any) {
+            console.warn("[delete-account] Brevo admin dispatch error:", bErr?.message);
+          }
+        }
+
+        // Fallback: Resend API
+        if (!adminEmailSent && resendApiKey) {
+          try {
+            const senderEmail = Deno.env.get("RESEND_INVITE_SENDER") || "onboarding@resend.dev";
+            const resendRes = await fetch("https://api.resend.com/emails", {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${resendApiKey.trim()}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                from: `PeoplePulse <${senderEmail}>`,
+                to: [adminEmail],
+                subject: `Team Member Account Deletion Notice: ${safeUserName} — PeoplePulse`,
+                html: adminEmailHtml,
+              }),
+            });
+            if (resendRes.ok) {
+              console.log(`[delete-account] Admin notification delivered to ${adminEmail} via Resend.`);
+              adminEmailSent = true;
+            }
+          } catch (rErr: any) {
+            console.warn("[delete-account] Resend admin dispatch error:", rErr?.message);
+          }
         }
       }
     }
