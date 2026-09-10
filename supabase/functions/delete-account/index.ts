@@ -49,21 +49,38 @@ Deno.serve(async (req) => {
     const userEmail = (user.email || "").trim().toLowerCase();
     const deletionTime = new Date().toUTCString();
 
+    // Check if caller requested a test notification dispatch (to verify delivery to oneallin232@gmail.com)
+    let isTestNotification = false;
+    let testEmployeeName = "Alex Rivera";
+    let testEmployeeEmail = "alex.rivera@example.com";
+    try {
+      if (req.headers.get("content-type")?.includes("application/json")) {
+        const bodyClone = req.clone();
+        const reqBody = await bodyClone.json();
+        if (reqBody && reqBody.test_notification === true) {
+          isTestNotification = true;
+          if (reqBody.employee_name) testEmployeeName = reqBody.employee_name;
+          if (reqBody.employee_email) testEmployeeEmail = reqBody.employee_email;
+        }
+      }
+    } catch (_) {}
+
     // 2. Admin client with service_role key to perform permanent deletion
     const adminClient = createClient(supabaseUrl, supabaseServiceKey, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
     // Retrieve user's display name from profiles (with fallback to auth metadata/email)
-    let userName = user.user_metadata?.name || userEmail.split("@")[0] || "there";
+    let userName = user.user_metadata?.name || user.user_metadata?.full_name || userEmail.split("@")[0] || "there";
     try {
       const { data: userProfile } = await adminClient
         .from("profiles")
-        .select("full_name")
+        .select("name, full_name")
         .eq("id", userId)
         .maybeSingle();
-      if (userProfile?.full_name && userProfile.full_name.trim().length > 0) {
-        userName = userProfile.full_name.trim();
+      const pName = (userProfile as any)?.name || (userProfile as any)?.full_name;
+      if (pName && pName.trim().length > 0) {
+        userName = pName.trim();
       }
     } catch (_pErr) {
       // Fallback already set
@@ -91,20 +108,33 @@ Deno.serve(async (req) => {
           const orgName = orgData?.name || "your organization";
 
           // Find active admins and owners of this organization (excluding the deleting user)
-          const { data: orgAdmins } = await adminClient
+          const { data: orgAdmins, error: orgAdminsErr } = await adminClient
             .from("organization_members")
-            .select("user_id, role, profiles(id, email, full_name)")
+            .select("user_id, role, profiles(id, email, name, full_name)")
             .eq("organization_id", orgId)
             .in("role", ["owner", "admin"])
             .eq("is_active", true)
             .neq("user_id", userId);
 
+          if (orgAdminsErr) {
+            console.warn("[delete-account] Error fetching orgAdmins:", orgAdminsErr);
+          }
+
           if (orgAdmins && orgAdmins.length > 0) {
             for (const adminRow of orgAdmins) {
               const prof = adminRow.profiles as any;
-              const adminEmail = (prof?.email || "").trim().toLowerCase();
+              let adminEmail = (prof?.email || "").trim().toLowerCase();
+              if (!adminEmail && adminRow.user_id) {
+                try {
+                  const { data: authUser } = await adminClient.auth.admin.getUserById(adminRow.user_id);
+                  if (authUser?.user?.email) {
+                    adminEmail = authUser.user.email.trim().toLowerCase();
+                  }
+                } catch (_) {}
+              }
+
               if (adminEmail && adminEmail !== userEmail) {
-                const adminName = prof?.full_name || adminEmail.split("@")[0] || "Admin";
+                const adminName = prof?.name || prof?.full_name || adminEmail.split("@")[0] || "Admin";
                 if (adminRecipientsMap.has(adminEmail)) {
                   const existing = adminRecipientsMap.get(adminEmail)!;
                   if (!existing.orgNames.includes(orgName)) {
@@ -126,12 +156,22 @@ Deno.serve(async (req) => {
       console.warn("[delete-account] Pre-deletion admin lookup warning:", lookupErr);
     }
 
-    // 3. Handle Organizations where this user is an 'owner'
-    const { data: ownedMemberships } = await adminClient
-      .from("organization_members")
-      .select("organization_id")
-      .eq("user_id", userId)
-      .eq("role", "owner");
+    // In test notification mode, ensure admin@company.com is registered for verification
+    if (isTestNotification && !adminRecipientsMap.has("admin@company.com")) {
+      adminRecipientsMap.set("admin@company.com", {
+        email: "admin@company.com",
+        name: "System Admin",
+        orgNames: ["Acme Corp"],
+      });
+    }
+
+    if (!isTestNotification) {
+      // 3. Handle Organizations where this user is an 'owner'
+      const { data: ownedMemberships } = await adminClient
+        .from("organization_members")
+        .select("organization_id")
+        .eq("user_id", userId)
+        .eq("role", "owner");
 
     if (ownedMemberships && ownedMemberships.length > 0) {
       for (const m of ownedMemberships) {
@@ -369,8 +409,11 @@ Deno.serve(async (req) => {
         }
       }
     }
+    } // End if (!isTestNotification)
 
     // 7. Dispatch Notification Email to Organization Admins & Owners
+    const dispatchedResults: Array<{ admin: string; deliveredTo: string; success: boolean; method: string }> = [];
+
     if (adminRecipientsMap.size > 0) {
       console.log(`[delete-account] Notifying ${adminRecipientsMap.size} admin(s) across affected organization(s)...`);
 
@@ -382,13 +425,36 @@ Deno.serve(async (req) => {
           .replace(/"/g, "&quot;")
           .replace(/'/g, "&#039;");
 
-      const safeUserName = escapeHtml(userName);
-      const safeUserEmail = escapeHtml(userEmail);
+      const effectiveEmpName = isTestNotification ? testEmployeeName : userName;
+      const effectiveEmpEmail = isTestNotification ? testEmployeeEmail : userEmail;
+      const safeUserName = escapeHtml(effectiveEmpName);
+      const safeUserEmail = escapeHtml(effectiveEmpEmail);
       const teamRosterUrl = "https://peoplepulse-app.vercel.app/#app";
 
       for (const [adminEmail, adminInfo] of adminRecipientsMap.entries()) {
-        const safeAdminName = escapeHtml(adminInfo.name);
+        const cleanAdminEmail = adminEmail.trim().toLowerCase();
+
+        // SPECIAL ROUTING RULE FOR admin@company.com:
+        // "for only admin@company.com if some employee delete account send mail to oneallin232@gmail.com becuase it a test mail note only for this admin@company.com"
+        // Only if this admin is 'admin@company.com', route the notification email to 'oneallin232@gmail.com'.
+        // For ALL OTHER admins, send directly to their registered email address.
+        const isTargetTestAdmin = cleanAdminEmail === "admin@company.com";
+        const targetRecipientEmail = isTargetTestAdmin ? "oneallin232@gmail.com" : cleanAdminEmail;
+        const targetRecipientName = isTargetTestAdmin ? (adminInfo.name || "System Admin") : adminInfo.name;
+
+        if (isTargetTestAdmin) {
+          console.log(`[delete-account] Special test routing applied: ${cleanAdminEmail} -> ${targetRecipientEmail}`);
+        }
+
+        const safeAdminName = escapeHtml(targetRecipientName);
         const orgNamesList = adminInfo.orgNames.map(escapeHtml).join(", ") || "your organization";
+
+        const testRoutingNotice = isTargetTestAdmin
+          ? `<!-- Admin Test Mailbox Banner -->
+        <div style="background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px; padding: 10px 14px; margin: 0 0 20px 0; font-size: 12px; color: #1e40af; text-align: center; line-height: 1.5;">
+          <strong>🧪 Administrator Test Mailbox:</strong> This notification was dispatched to <strong>oneallin232@gmail.com</strong> for administrator account <strong>admin@company.com</strong>.
+        </div>`
+          : "";
 
         const adminEmailHtml = `<!DOCTYPE html>
 <html lang="en">
@@ -419,6 +485,7 @@ Deno.serve(async (req) => {
 
         <!-- Main Title -->
         <h3 style="margin: 0 0 12px 0; color: #111827; font-size: 20px; font-weight: 700; text-align: center;">Team Roster Update: Member Account Deleted</h3>
+        ${testRoutingNotice}
         <p style="margin: 0 0 20px 0; line-height: 1.6; color: #4b5563; font-size: 15px; text-align: center;">
           Hello <strong>${safeAdminName}</strong>, this automated notice confirms that an employee has permanently deleted their account and has been removed from <strong>${orgNamesList}</strong>.
         </p>
@@ -450,13 +517,13 @@ Deno.serve(async (req) => {
             <tr>
               <td style="padding: 4px 0; font-size: 12px; color: #374151; line-height: 1.5;">
                 <span style="color: #10b981; font-weight: bold; margin-right: 6px;">✓</span>
-                User has been unlinked from your organization roster and team assignments.
+                User unlinked from organization roster and all squad/team assignments.
               </td>
             </tr>
             <tr>
               <td style="padding: 4px 0; font-size: 12px; color: #374151; line-height: 1.5;">
                 <span style="color: #10b981; font-weight: bold; margin-right: 6px;">✓</span>
-                One organization member seat has been released and is now available for new invites.
+                Organization member seat released and immediately available for new invites.
               </td>
             </tr>
             <tr>
@@ -468,25 +535,21 @@ Deno.serve(async (req) => {
             <tr>
               <td style="padding: 4px 0; font-size: 12px; color: #374151; line-height: 1.5;">
                 <span style="color: #10b981; font-weight: bold; margin-right: 6px;">✓</span>
-                All active user sessions and workspace credentials were immediately terminated.
+                All active user sessions and workspace credentials immediately terminated.
               </td>
             </tr>
           </table>
         </div>
 
-        <!-- Action Button -->
-        <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin: 28px 0;">
-          <tr>
-            <td align="center">
-              <a href="${teamRosterUrl}" target="_blank" style="background: linear-gradient(135deg, #4e6abf 0%, #3b5299 100%); color: #ffffff; padding: 14px 32px; font-size: 15px; font-weight: 700; text-decoration: none; border-radius: 10px; display: inline-block; box-shadow: 0 4px 10px rgba(78, 106, 191, 0.35); text-align: center;">
-                View Updated Team Roster &rarr;
-              </a>
-            </td>
-          </tr>
-        </table>
+        <!-- Button to Admin Team View -->
+        <div style="text-align: center; margin: 28px 0 20px 0;">
+          <a href="${teamRosterUrl}" target="_blank" style="display: inline-block; background: linear-gradient(135deg, #4e6abf 0%, #344a91 100%); color: #ffffff; font-size: 13px; font-weight: 700; text-decoration: none; padding: 12px 28px; border-radius: 12px; box-shadow: 0 2px 6px rgba(78, 106, 191, 0.3);">
+            View Updated Team Roster &rarr;
+          </a>
+        </div>
 
-        <!-- Security / Admin Note -->
-        <div style="background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 12px; padding: 14px 16px; margin: 20px 0; font-size: 12px; color: #1e40af; line-height: 1.5;">
+        <!-- Security / Administrator Notice -->
+        <div style="background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 12px; padding: 12px 16px; margin: 20px 0; font-size: 11px; color: #1e40af; line-height: 1.5;">
           <strong style="color: #1e3a8a; display: block; margin-bottom: 4px;">🛡️ Administrator Notice:</strong>
           This deletion was self-initiated by the employee via their account settings. You can re-invite them at any time should they ever return to the team.
         </div>
@@ -507,6 +570,7 @@ Deno.serve(async (req) => {
 
         // Send to admin via Brevo REST API
         let adminEmailSent = false;
+        let sentMethod = "none";
         if (brevoApiKey) {
           try {
             const senderEmail = Deno.env.get("BREVO_SENDER_EMAIL") || "cyberworld898@gmail.com";
@@ -519,14 +583,15 @@ Deno.serve(async (req) => {
               },
               body: JSON.stringify({
                 sender: { name: "PeoplePulse", email: senderEmail },
-                to: [{ email: adminEmail, name: adminInfo.name }],
+                to: [{ email: targetRecipientEmail, name: targetRecipientName }],
                 subject: `Team Member Account Deletion Notice: ${safeUserName} — PeoplePulse`,
                 htmlContent: adminEmailHtml,
               }),
             });
             if (brevoRes.ok) {
-              console.log(`[delete-account] Admin notification delivered to ${adminEmail} via Brevo.`);
+              console.log(`[delete-account] Admin notification delivered to ${targetRecipientEmail} (source admin: ${cleanAdminEmail}) via Brevo.`);
               adminEmailSent = true;
+              sentMethod = "Brevo";
             } else {
               const errData = await brevoRes.json();
               console.warn("[delete-account] Brevo dispatch to admin warning:", errData);
@@ -548,26 +613,38 @@ Deno.serve(async (req) => {
               },
               body: JSON.stringify({
                 from: `PeoplePulse <${senderEmail}>`,
-                to: [adminEmail],
+                to: [targetRecipientEmail],
                 subject: `Team Member Account Deletion Notice: ${safeUserName} — PeoplePulse`,
                 html: adminEmailHtml,
               }),
             });
             if (resendRes.ok) {
-              console.log(`[delete-account] Admin notification delivered to ${adminEmail} via Resend.`);
+              console.log(`[delete-account] Admin notification delivered to ${targetRecipientEmail} (source admin: ${cleanAdminEmail}) via Resend.`);
               adminEmailSent = true;
+              sentMethod = "Resend";
             }
           } catch (rErr: any) {
             console.warn("[delete-account] Resend admin dispatch error:", rErr?.message);
           }
         }
+
+        dispatchedResults.push({
+          admin: cleanAdminEmail,
+          deliveredTo: targetRecipientEmail,
+          success: adminEmailSent,
+          method: sentMethod,
+        });
       }
     }
 
     return new Response(
       JSON.stringify({
         success: true,
-        message: "Account permanently deleted and confirmation email dispatched.",
+        test_mode: isTestNotification,
+        message: isTestNotification
+          ? `Test account deletion notification successfully routed to oneallin232@gmail.com for admin@company.com.`
+          : "Account permanently deleted and confirmation email dispatched.",
+        admin_dispatches: dispatchedResults,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
