@@ -15,7 +15,7 @@ import {
   Settings, Bell, ChevronDown, Lock, ArrowRight, Search, Menu, X, Sparkles,
   ArrowUp, ArrowDown, ShieldCheck, Check, LogOut, ArrowLeft, Copy, Building2, Plus, AlertCircle,
   RotateCw, Trash2, Link2, Send, Eye, EyeOff, Mail, ExternalLink, UserX, AlertTriangle, FileText, Download,
-  Activity, Calendar, Clock, Heart, Award
+  Activity, Calendar, Clock, Heart, Award, Bot, Save
 } from "lucide-react";
 
 
@@ -246,9 +246,12 @@ function KPICard({ label, value, unit, delta, deltaSuffix, goodDirection, extra,
    ============================================================ */
 const NAV = {
   manager: [
-    { key: "manager-dashboard", label: "Dashboard", icon: Home },
-    { key: "manager-team", label: "Team", icon: Users },
+    { key: "manager-dashboard", label: "Overview", icon: Home },
     { key: "manager-insights", label: "Insights", icon: TrendingUp },
+    { key: "manager-employees", label: "Employees", icon: UserPlus },
+    { key: "manager-teams", label: "Teams", icon: Layers },
+    { key: "manager-questions", label: "Questions", icon: ListChecks },
+    { key: "manager-imports", label: "Imports", icon: UploadCloud },
     { key: "manager-settings", label: "Settings", icon: Settings },
   ],
   employee: [
@@ -436,6 +439,24 @@ function Sidebar({ role, setRole, view, setView, mobileOpen, setMobileOpen, onRe
                 {role === r && <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />}
               </button>
             ))}
+          </div>
+        )}
+
+        {/* PulseAgent Copilot Quick Launcher for Admins and Managers */}
+        {(effectiveRole === "admin" || effectiveRole === "manager" || effectiveRole === "owner") && (
+          <div className="px-3 pt-2">
+            <button
+              type="button"
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent("peoplepulse_open_copilot"));
+                setMobileOpen(false);
+              }}
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-blue-50/90 to-indigo-50/80 border border-blue-200/80 text-[#344A91] hover:from-blue-100 hover:to-indigo-100 transition-all shadow-xs cursor-pointer group"
+            >
+              <Sparkles size={15} className="text-[#4E6ABF] group-hover:scale-110 transition-transform shrink-0" />
+              <span className="flex-1 text-left font-medium">PulseAgent Copilot</span>
+              <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-100/90 text-[#344A91] font-bold uppercase">AI</span>
+            </button>
           </div>
         )}
 
@@ -2553,6 +2574,37 @@ function ManagerDashboard({ setMobileOpen, setView }) {
         }
       />
 
+      {/* PulseAgent AI Autonomous Copilot Feature Showcase for Managers */}
+      <div className="mb-6">
+        <Card className="bg-gradient-to-r from-blue-50 via-indigo-50/40 to-white border-blue-100">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-[#4E6ABF] text-white flex items-center justify-center shrink-0 shadow-sm">
+                <Bot size={22} />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-bold" style={{ color: T.text }}>PulseAgent HR Copilot</p>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    Active
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Monitors employee wellbeing, spots burnout early, and provides actionable 1:1 talking points.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new CustomEvent("peoplepulse_open_copilot"))}
+              className="text-xs font-semibold px-4 py-2 rounded-xl bg-[#4E6ABF] text-white hover:bg-[#344A91] transition-all flex items-center justify-center gap-1.5 shadow-xs cursor-pointer shrink-0"
+            >
+              <Sparkles size={14} /> Open PulseAgent
+            </button>
+          </div>
+        </Card>
+      </div>
+
       {error && (
         <div className="mb-6 p-4 rounded-xl text-sm bg-red-50 border border-red-200 text-red-700 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -2754,6 +2806,8 @@ function ManagerDashboard({ setMobileOpen, setView }) {
 function ManagerTeam({ setMobileOpen }) {
   const { user } = useAuth();
   const { activeOrganizationId } = useOrganization();
+  const [allTeams, setAllTeams] = useState([]);
+  const [selectedTeamId, setSelectedTeamId] = useState(null);
   const [team, setTeam] = useState(null);
   const [members, setMembers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -2774,18 +2828,35 @@ function ManagerTeam({ setMobileOpen }) {
         )
       `)
       .eq("organization_id", activeOrganizationId)
+      .order("name", { ascending: true })
       .then(({ data }) => {
         if (!isMounted) return;
         if (data && data.length > 0) {
+          setAllTeams(data);
           const myTeam = data.find((t) => t.manager_id === user?.id) || data[0];
+          setSelectedTeamId(myTeam.id);
           setTeam(myTeam);
           const mems = (myTeam.team_members || []).map((tm) => tm.profiles).filter(Boolean);
           setMembers(mems);
+        } else {
+          setAllTeams([]);
+          setTeam(null);
+          setMembers([]);
         }
         setLoading(false);
       });
     return () => { isMounted = false; };
   }, [activeOrganizationId, user?.id]);
+
+  const handleSelectTeam = (targetTeamId) => {
+    setSelectedTeamId(targetTeamId);
+    const selected = allTeams.find((t) => t.id === targetTeamId);
+    if (selected) {
+      setTeam(selected);
+      const mems = (selected.team_members || []).map((tm) => tm.profiles).filter(Boolean);
+      setMembers(mems);
+    }
+  };
 
   return (
     <div>
@@ -2793,6 +2864,24 @@ function ManagerTeam({ setMobileOpen }) {
         title={team?.name || "Your Team"}
         subtitle={`${members.length} team members in this squad`}
         setMobileOpen={setMobileOpen}
+        right={
+          allTeams.length > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500 font-medium hidden sm:inline">Switch Team:</span>
+              <select
+                value={selectedTeamId || ""}
+                onChange={(e) => handleSelectTeam(e.target.value)}
+                className="text-xs font-semibold py-1.5 px-3 rounded-xl border border-gray-200 bg-white text-gray-800 outline-none focus:ring-2 focus:ring-blue-200 transition-all cursor-pointer shadow-xs"
+              >
+                {allTeams.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name} {t.manager_id === user?.id ? "(Your Assigned Team)" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )
+        }
       />
       <Card>
         <p className="text-base font-semibold mb-3" style={{ color: T.text }}>Assigned Team Members</p>
@@ -7652,13 +7741,52 @@ function ToggleRow({ label, sub, defaultOn = false }) {
 }
 
 function EmployeeSettings({ setMobileOpen, onSignOut, onReturnHome }) {
-  const { user, profile, deleteAccount, signOut } = useAuth();
+  const { user, profile, deleteAccount, signOut, updateProfileName } = useAuth();
   const { activeOrganization } = useOrganization();
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [hasConsent, setHasConsent] = useState(false);
   const [confirmText, setConfirmText] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState(null);
+
+  // Editable Name State
+  const initialName = profile?.name || profile?.full_name || user?.user_metadata?.name || user?.user_metadata?.full_name || "";
+  const [nameVal, setNameVal] = useState(initialName);
+  const [isSavingName, setIsSavingName] = useState(false);
+  const [nameSaveMsg, setNameSaveMsg] = useState(null);
+
+  useEffect(() => {
+    const current = profile?.name || profile?.full_name || user?.user_metadata?.name || user?.user_metadata?.full_name || "";
+    if (current) {
+      setNameVal(current);
+    }
+  }, [profile?.name, profile?.full_name, user?.user_metadata]);
+
+  const handleSaveName = async (e) => {
+    e?.preventDefault?.();
+    const cleanName = nameVal.trim();
+    if (!cleanName) {
+      setNameSaveMsg({ type: "error", text: "Name cannot be empty." });
+      return;
+    }
+    setIsSavingName(true);
+    setNameSaveMsg(null);
+    try {
+      if (updateProfileName) {
+        await updateProfileName(cleanName);
+      } else {
+        await supabase.from("profiles").update({ name: cleanName }).eq("id", user.id);
+        await supabase.auth.updateUser({ data: { name: cleanName, full_name: cleanName } });
+      }
+      setNameSaveMsg({ type: "success", text: "Full name updated successfully!" });
+      setTimeout(() => setNameSaveMsg(null), 3500);
+    } catch (err) {
+      console.error("[handleSaveName error]:", err);
+      setNameSaveMsg({ type: "error", text: err.message || "Failed to update full name." });
+    } finally {
+      setIsSavingName(false);
+    }
+  };
 
   const targetConfirmText = (user?.email || "DELETE").trim().toLowerCase();
   const isConfirmValid = hasConsent && confirmText.trim().toLowerCase() === targetConfirmText;
@@ -7695,12 +7823,30 @@ function EmployeeSettings({ setMobileOpen, onSignOut, onReturnHome }) {
           <div className="space-y-3">
             <div>
               <label className="text-xs font-medium block mb-1" style={{ color: T.muted }}>Full Name</label>
-              <input
-                readOnly
-                value={profile?.full_name || user?.user_metadata?.full_name || "—"}
-                className="w-full px-3 py-2 rounded-lg border text-sm bg-gray-50"
-                style={{ borderColor: T.border }}
-              />
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={nameVal}
+                  onChange={(e) => setNameVal(e.target.value)}
+                  placeholder="Enter your full name"
+                  className="flex-1 px-3 py-2 rounded-lg border text-sm bg-white focus:ring-2 focus:ring-blue-100 outline-none transition-all"
+                  style={{ borderColor: T.border }}
+                />
+                <button
+                  type="button"
+                  disabled={isSavingName || !nameVal.trim() || nameVal.trim() === (profile?.name || profile?.full_name || user?.user_metadata?.name || user?.user_metadata?.full_name || "")}
+                  onClick={handleSaveName}
+                  className="px-3.5 py-2 text-xs font-semibold rounded-lg bg-[#4E6ABF] text-white hover:bg-[#344A91] disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-1.5 shrink-0 shadow-xs cursor-pointer"
+                >
+                  {isSavingName ? <RotateCw size={13} className="animate-spin" /> : <Save size={13} />}
+                  <span>Save</span>
+                </button>
+              </div>
+              {nameSaveMsg && (
+                <p className={`text-xs mt-1.5 font-medium ${nameSaveMsg.type === "success" ? "text-emerald-600" : "text-red-600"}`}>
+                  {nameSaveMsg.text}
+                </p>
+              )}
             </div>
             <div>
               <label className="text-xs font-medium block mb-1" style={{ color: T.muted }}>Email Address</label>
@@ -7900,13 +8046,52 @@ function EmployeeSettings({ setMobileOpen, onSignOut, onReturnHome }) {
 }
 
 function AdminSettings({ setMobileOpen, onSignOut, onReturnHome }) {
-  const { user, deleteAccount, signOut } = useAuth();
+  const { user, profile, deleteAccount, signOut, updateProfileName } = useAuth();
   const { activeOrganization, plan, usage, seatUsage, teamUsage } = useOrganization();
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [hasConsent, setHasConsent] = useState(false);
   const [confirmText, setConfirmText] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState(null);
+
+  // Editable Name State
+  const initialName = profile?.name || profile?.full_name || user?.user_metadata?.name || user?.user_metadata?.full_name || "";
+  const [nameVal, setNameVal] = useState(initialName);
+  const [isSavingName, setIsSavingName] = useState(false);
+  const [nameSaveMsg, setNameSaveMsg] = useState(null);
+
+  useEffect(() => {
+    const current = profile?.name || profile?.full_name || user?.user_metadata?.name || user?.user_metadata?.full_name || "";
+    if (current) {
+      setNameVal(current);
+    }
+  }, [profile?.name, profile?.full_name, user?.user_metadata]);
+
+  const handleSaveName = async (e) => {
+    e?.preventDefault?.();
+    const cleanName = nameVal.trim();
+    if (!cleanName) {
+      setNameSaveMsg({ type: "error", text: "Name cannot be empty." });
+      return;
+    }
+    setIsSavingName(true);
+    setNameSaveMsg(null);
+    try {
+      if (updateProfileName) {
+        await updateProfileName(cleanName);
+      } else {
+        await supabase.from("profiles").update({ name: cleanName }).eq("id", user.id);
+        await supabase.auth.updateUser({ data: { name: cleanName, full_name: cleanName } });
+      }
+      setNameSaveMsg({ type: "success", text: "Full name updated successfully!" });
+      setTimeout(() => setNameSaveMsg(null), 3500);
+    } catch (err) {
+      console.error("[handleSaveName error]:", err);
+      setNameSaveMsg({ type: "error", text: err.message || "Failed to update full name." });
+    } finally {
+      setIsSavingName(false);
+    }
+  };
 
   const targetConfirmText = (user?.email || "DELETE").trim().toLowerCase();
   const isConfirmValid = hasConsent && confirmText.trim().toLowerCase() === targetConfirmText;
@@ -7985,6 +8170,48 @@ function AdminSettings({ setMobileOpen, onSignOut, onReturnHome }) {
           <p className="text-base font-semibold mb-3" style={{ color: T.text }}>Check-in settings</p>
           <ToggleRow label="Daily reminders" sub="Sent every morning at 9am" defaultOn />
           <ToggleRow label="Include free-text question" sub="Optional open response" defaultOn />
+        </Card>
+
+        <Card>
+          <p className="text-base font-semibold mb-3" style={{ color: T.text }}>Account Information</p>
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs font-medium block mb-1" style={{ color: T.muted }}>Full Name</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={nameVal}
+                  onChange={(e) => setNameVal(e.target.value)}
+                  placeholder="Enter your full name"
+                  className="flex-1 px-3 py-2 rounded-lg border text-sm bg-white focus:ring-2 focus:ring-blue-100 outline-none transition-all"
+                  style={{ borderColor: T.border }}
+                />
+                <button
+                  type="button"
+                  disabled={isSavingName || !nameVal.trim() || nameVal.trim() === (profile?.name || profile?.full_name || user?.user_metadata?.name || user?.user_metadata?.full_name || "")}
+                  onClick={handleSaveName}
+                  className="px-3.5 py-2 text-xs font-semibold rounded-lg bg-[#4E6ABF] text-white hover:bg-[#344A91] disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-1.5 shrink-0 shadow-xs cursor-pointer"
+                >
+                  {isSavingName ? <RotateCw size={13} className="animate-spin" /> : <Save size={13} />}
+                  <span>Save</span>
+                </button>
+              </div>
+              {nameSaveMsg && (
+                <p className={`text-xs mt-1.5 font-medium ${nameSaveMsg.type === "success" ? "text-emerald-600" : "text-red-600"}`}>
+                  {nameSaveMsg.text}
+                </p>
+              )}
+            </div>
+            <div>
+              <label className="text-xs font-medium block mb-1" style={{ color: T.muted }}>Email Address</label>
+              <input
+                readOnly
+                value={user?.email || "—"}
+                className="w-full px-3 py-2 rounded-lg border text-sm bg-gray-50"
+                style={{ borderColor: T.border }}
+              />
+            </div>
+          </div>
         </Card>
 
         <Card>
@@ -8175,9 +8402,15 @@ export default function PeoplePulseApp({ role = "manager", onReturnHome, onSignO
   const views = useMemo(() => ({
     "manager-dashboard": <ManagerDashboard setMobileOpen={setMobileOpen} setView={setView} />,
     "manager-team": <ManagerTeam setMobileOpen={setMobileOpen} />,
-    "manager-insights": <ManagerInsights setMobileOpen={setMobileOpen} />,
+    "manager-insights": <AdminInsights setMobileOpen={setMobileOpen} />,
+    "manager-employees": <AdminEmployees setMobileOpen={setMobileOpen} />,
+    "manager-teams": <AdminTeams setMobileOpen={setMobileOpen} />,
+    "manager-questions": <AdminQuestions setMobileOpen={setMobileOpen} />,
+    "manager-imports": <AdminImports setMobileOpen={setMobileOpen} />,
+    "manager-settings": <EmployeeSettings setMobileOpen={setMobileOpen} onSignOut={onSignOut} onReturnHome={onReturnHome} />,
     "employee-dashboard": <EmployeeDashboard setMobileOpen={setMobileOpen} setView={setView} />,
     "employee-checkin": <EmployeeCheckin setMobileOpen={setMobileOpen} onSubmitted={() => setView("employee-dashboard")} />,
+    "employee-settings": <EmployeeSettings setMobileOpen={setMobileOpen} onSignOut={onSignOut} onReturnHome={onReturnHome} />,
     "admin-dashboard": <AdminDashboard setMobileOpen={setMobileOpen} />,
     "admin-insights": <AdminInsights setMobileOpen={setMobileOpen} />,
     "admin-employees": <AdminEmployees setMobileOpen={setMobileOpen} />,
@@ -8185,8 +8418,6 @@ export default function PeoplePulseApp({ role = "manager", onReturnHome, onSignO
     "admin-questions": <AdminQuestions setMobileOpen={setMobileOpen} />,
     "admin-imports": <AdminImports setMobileOpen={setMobileOpen} />,
     "admin-settings": <AdminSettings setMobileOpen={setMobileOpen} onSignOut={onSignOut} onReturnHome={onReturnHome} />,
-    "employee-settings": <EmployeeSettings setMobileOpen={setMobileOpen} onSignOut={onSignOut} onReturnHome={onReturnHome} />,
-    "manager-settings": <EmployeeSettings setMobileOpen={setMobileOpen} onSignOut={onSignOut} onReturnHome={onReturnHome} />,
   }), [view]);
 
   return (

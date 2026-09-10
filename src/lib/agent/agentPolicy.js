@@ -48,16 +48,8 @@ export function authorizeToolExecution({ user, role, tool, activeOrgId, args = {
     return { authorized: false, reason: tenantCheck.error };
   }
 
-  // 3. Manager Scope Restriction: Can only act on assigned team
-  if (effectiveRole === "manager" && tool.name === "diagnose_team_health") {
-    // If manager has an assigned team, ensure target matches or defaults to their team
-    if (args.team_id && user.team_id && args.team_id !== user.team_id) {
-      return {
-        authorized: false,
-        reason: "Managers may only inspect health metrics for their assigned team.",
-      };
-    }
-  }
+  // 3. Organization-Wide Scope: Managers and Admins can diagnose teams across their active organization
+  // Tenant scope validation in Step 2 ensures strict tenant isolation.
 
   // 4. Human Confirmation Policy for Sensitive / Destructive Actions
   if (tool.requiresConfirmation || tool.risk === TOOL_RISK_LEVELS.DESTRUCTIVE) {

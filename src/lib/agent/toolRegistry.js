@@ -11,7 +11,7 @@ export const TOOL_DEFINITIONS = [
   {
     name: "get_organization_metrics",
     description: "Fetches live organization-level participation rates, active team counts, and average engagement scores.",
-    permission: "admin",
+    permission: "manager",
     risk: TOOL_RISK_LEVELS.READ,
     requiresConfirmation: false,
     organizationScope: true,
@@ -45,7 +45,7 @@ export const TOOL_DEFINITIONS = [
   {
     name: "dispatch_adaptive_survey",
     description: "Deploys a targeted follow-up pulse survey question into the organization survey registry.",
-    permission: "admin",
+    permission: "manager",
     risk: TOOL_RISK_LEVELS.WRITE,
     requiresConfirmation: false,
     organizationScope: true,
@@ -82,7 +82,7 @@ export const TOOL_DEFINITIONS = [
   {
     name: "simulate_and_handle_failure",
     description: "Demonstrates autonomous failure detection on primary notification endpoints and live fallback adaptation.",
-    permission: "admin",
+    permission: "manager",
     risk: TOOL_RISK_LEVELS.READ,
     requiresConfirmation: false,
     organizationScope: true,

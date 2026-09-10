@@ -547,6 +547,36 @@ export function AuthProvider({ children }) {
     return { success: true };
   };
 
+  const updateProfileName = async (newName) => {
+    if (!user) throw new Error("No authenticated user.");
+    const cleanName = (newName || "").trim();
+    if (!cleanName) throw new Error("Full name cannot be empty.");
+
+    // Update profiles table
+    const { error: profileError } = await supabase
+      .from("profiles")
+      .update({ name: cleanName })
+      .eq("id", user.id);
+
+    if (profileError) {
+      console.error("[updateProfileName error]:", profileError);
+      throw profileError;
+    }
+
+    // Update supabase auth metadata
+    try {
+      await supabase.auth.updateUser({
+        data: { name: cleanName, full_name: cleanName },
+      });
+    } catch (e) {
+      console.warn("[updateProfileName] auth metadata update warning:", e.message);
+    }
+
+    // Refresh profile in context
+    const updated = await fetchProfile(user.id);
+    return updated;
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -565,6 +595,7 @@ export function AuthProvider({ children }) {
         signIn,
         signOut,
         deleteAccount,
+        updateProfileName,
         resetPassword,
         requestPasswordReset,
         updateUserPassword,
