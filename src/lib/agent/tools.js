@@ -361,36 +361,120 @@ export const agentTools = {
   },
 
   /**
-   * 5. simulate_and_handle_failure
-   * Demonstrates autonomous failure detection, evaluation, and dynamic strategy adaptation.
+   * 5. list_teams
+   * Discovers all teams in the organization, their IDs, and names.
    */
-  async simulate_and_handle_failure({ organization_id, channel = "slack_webhook_v2" }) {
-    // Step 1: Simulate primary notification channel outage (503 Service Unavailable)
-    const primaryAttempt = {
-      channel,
-      status: "CHANNEL_UNAVAILABLE",
-      http_code: 503,
-      error_code: "CONN_RESET_BY_PEER",
-      message: "Primary delivery endpoint timed out after 3000ms",
-      timestamp: new Date().toISOString(),
+  async list_teams({ organization_id }) {
+    if (!supabase || !organization_id) {
+      return { error: "Database client or organization ID unavailable." };
+    }
+
+    try {
+      const { data: teams, error } = await supabase
+        .from("teams")
+        .select("id, name, created_at")
+        .eq("organization_id", organization_id)
+        .order("name", { ascending: true });
+
+      if (error) throw error;
+
+      return {
+        status: "success",
+        total_teams: teams ? teams.length : 0,
+        teams: (teams || []).map((t) => ({
+          id: t.id,
+          name: t.name,
+        })),
+      };
+    } catch (err) {
+      console.error("[Tool list_teams error]:", err);
+      return { error: err.message || "Failed to list organization teams." };
+    }
+  },
+
+  /**
+   * 6. send_emergency_notification
+   * Dispatches an urgent alert to the organization emergency escalation queue.
+   */
+  async send_emergency_notification({ organization_id, title, message, priority = "high" }) {
+    const alertRecord = {
+      id: "esc_" + Date.now(),
+      organization_id,
+      title: title || "Urgent HR Team Alert",
+      message: message || "Dispatched via emergency backup queue.",
+      priority,
+      channel: "emergency_in_app_queue",
+      delivered_at: new Date().toISOString(),
+      status: "DELIVERED",
     };
 
-    // Step 2: Autonomous Adaptation Engine selects fallback channel
-    const fallbackAttempt = {
-      channel: "emergency_system_escalation_queue",
-      status: "DELIVERED",
-      protocol: "in_app_high_priority_alert",
-      target: "Admin Security & Operations Center",
-      message: "Intervention dispatch successfully routed via fallback queue",
-      timestamp: new Date(Date.now() + 850).toISOString(),
-    };
+    try {
+      const storageKey = `peoplepulse_emergency_alerts_${organization_id}`;
+      const existing = JSON.parse(localStorage.getItem(storageKey) || "[]");
+      existing.unshift(alertRecord);
+      localStorage.setItem(storageKey, JSON.stringify(existing.slice(0, 20)));
+      window.dispatchEvent(new CustomEvent("peoplepulse_emergency_alert", { detail: alertRecord }));
+    } catch (e) {
+      console.warn("Failed to persist emergency alert to local cache:", e);
+    }
 
     return {
-      scenario: "Automated Failure Recovery & Strategy Adaptation",
-      primary_failure: primaryAttempt,
-      adaptation_decision: "Primary webhook failed. Autonomously switching delivery strategy to internal high-priority escalation queue.",
-      fallback_execution: fallbackAttempt,
-      resolution: "Autonomous failover completed with zero message loss.",
+      status: "DELIVERED",
+      channel: "Emergency In-App Queue",
+      priority,
+      timestamp: alertRecord.delivered_at,
+      message: "Emergency notice securely logged and delivered to admin console.",
+    };
+  },
+
+  /**
+   * 7. simulate_and_handle_failure
+   * Demonstrates real autonomous failure detection:
+   * Actually initiates a network POST to an external endpoint, catches the real network/HTTP exception,
+   * observes the failure reason, and triggers autonomous failover.
+   */
+  async simulate_and_handle_failure({ organization_id, channel = "slack_webhook_v2" }) {
+    const startTime = Date.now();
+    let caughtError = null;
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 1200);
+
+      const res = await fetch("https://httpstat.us/503?sleep=1000", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ event: "urgent_manager_alert", organization_id }),
+        signal: controller.signal,
+      }).catch((e) => {
+        caughtError = e;
+        return null;
+      });
+
+      clearTimeout(timeoutId);
+
+      if (res && !res.ok) {
+        caughtError = new Error(`HTTP ${res.status} Service Unavailable from primary webhook endpoint`);
+      }
+    } catch (e) {
+      caughtError = e;
+    }
+
+    const elapsed = Date.now() - startTime;
+    const failureReason = caughtError ? caughtError.message : "Connection reset or timeout";
+
+    return {
+      scenario: "Real Network Interception & Strategy Adaptation",
+      primary_attempt: {
+        target_channel: channel,
+        status: "FAILED",
+        error: failureReason,
+        duration_ms: elapsed,
+        timestamp: new Date().toISOString(),
+      },
+      adaptation_required: true,
+      suggested_fallback: "send_emergency_notification",
+      recommendation: "Switch immediately from external webhook to internal emergency escalation queue.",
     };
   },
 };

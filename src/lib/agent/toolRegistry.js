@@ -80,6 +80,41 @@ export const TOOL_DEFINITIONS = [
     handler: agentTools.trigger_manager_action_brief,
   },
   {
+    name: "list_teams",
+    description: "Discovers all active teams in the organization, their IDs, and names to evaluate which teams have low participation or high stress.",
+    permission: "manager",
+    risk: TOOL_RISK_LEVELS.READ,
+    requiresConfirmation: false,
+    organizationScope: true,
+    inputSchema: {
+      type: "object",
+      properties: {
+        organization_id: { type: "string", description: "Target organization UUID" },
+      },
+      required: ["organization_id"],
+    },
+    handler: agentTools.list_teams,
+  },
+  {
+    name: "send_emergency_notification",
+    description: "Dispatches an urgent alert to the organization emergency escalation queue when primary channels fail.",
+    permission: "manager",
+    risk: TOOL_RISK_LEVELS.WRITE,
+    requiresConfirmation: false,
+    organizationScope: true,
+    inputSchema: {
+      type: "object",
+      properties: {
+        organization_id: { type: "string", description: "Target organization UUID" },
+        title: { type: "string", description: "Title of the alert" },
+        message: { type: "string", description: "Alert details and recommended action" },
+        priority: { type: "string", description: "Priority level (e.g. high, critical)" },
+      },
+      required: ["organization_id", "title", "message"],
+    },
+    handler: agentTools.send_emergency_notification,
+  },
+  {
     name: "simulate_and_handle_failure",
     description: "Demonstrates autonomous failure detection on primary notification endpoints and live fallback adaptation.",
     permission: "manager",
@@ -110,6 +145,37 @@ class ToolRegistry {
 
   getAllTools() {
     return Array.from(this.tools.values()).map(({ handler, ...meta }) => meta);
+  }
+
+  /**
+   * Converts all registered tools into standard Gemini function declarations format
+   */
+  getGeminiFunctionDeclarations() {
+    return Array.from(this.tools.values()).map((tool) => {
+      const properties = {};
+      const rawProps = tool.inputSchema?.properties || {};
+
+      Object.entries(rawProps).forEach(([key, val]) => {
+        // Exclude organization_id from LLM parameter generation since it is injected securely by the runner
+        if (key === "organization_id") return;
+        properties[key] = {
+          type: (val.type || "STRING").toUpperCase(),
+          description: val.description || key,
+        };
+      });
+
+      const required = (tool.inputSchema?.required || []).filter((r) => r !== "organization_id");
+
+      return {
+        name: tool.name,
+        description: tool.description,
+        parameters: {
+          type: "OBJECT",
+          properties,
+          required,
+        },
+      };
+    });
   }
 
   async execute(toolName, rawArgs = {}, context = {}) {
