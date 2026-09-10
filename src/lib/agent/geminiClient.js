@@ -8,6 +8,7 @@
  */
 
 const STORAGE_KEY_API_KEY = "peoplepulse_gemini_api_key";
+const STORAGE_KEY_PREVIOUS_API_KEY = "peoplepulse_gemini_previous_api_key";
 const STORAGE_KEY_MODEL = "peoplepulse_gemini_model";
 const DEFAULT_MODEL = "gemini-2.0-flash";
 
@@ -21,6 +22,13 @@ export function getStoredApiKey() {
   if (typeof window === "undefined") return "";
   const stored = localStorage.getItem(STORAGE_KEY_API_KEY);
   if (stored && stored.trim()) return stored.trim();
+  return "";
+}
+
+export function getPreviousApiKey() {
+  if (typeof window === "undefined") return "";
+  const prev = localStorage.getItem(STORAGE_KEY_PREVIOUS_API_KEY);
+  if (prev && prev.trim()) return prev.trim();
   try {
     return (typeof import.meta !== "undefined" && import.meta.env?.VITE_GEMINI_API_KEY ? import.meta.env.VITE_GEMINI_API_KEY : "").trim();
   } catch (e) {
@@ -28,12 +36,26 @@ export function getStoredApiKey() {
   }
 }
 
+export function saveWorkingApiKey(key) {
+  if (typeof window === "undefined" || !key || !key.trim()) return;
+  localStorage.setItem(STORAGE_KEY_PREVIOUS_API_KEY, key.trim());
+}
+
 export function setStoredApiKey(key) {
   if (typeof window === "undefined") return;
-  if (!key) {
+  const current = localStorage.getItem(STORAGE_KEY_API_KEY);
+  if (current && current.trim() && current.trim() !== key?.trim()) {
+    // Preserve previously active key as fallback
+    localStorage.setItem(STORAGE_KEY_PREVIOUS_API_KEY, current.trim());
+  }
+  if (!key || !key.trim()) {
     localStorage.removeItem(STORAGE_KEY_API_KEY);
   } else {
     localStorage.setItem(STORAGE_KEY_API_KEY, key.trim());
+    // Also initialize previous key if none was set
+    if (!localStorage.getItem(STORAGE_KEY_PREVIOUS_API_KEY)) {
+      localStorage.setItem(STORAGE_KEY_PREVIOUS_API_KEY, key.trim());
+    }
   }
 }
 
@@ -48,7 +70,21 @@ export function setSelectedModel(modelId) {
 }
 
 /**
- * Executes a single conversational step with Gemini Function Calling
+ * Helper to call Gemini REST endpoint with a specific key
+ */
+async function sendGeminiRequest(apiKey, model, payload) {
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  return await fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+/**
+ * Executes a single conversational step with Gemini Function Calling.
+ * If user does not provide an API key or if the provided key fails,
+ * it automatically falls back and sends the request to the previous API key.
  */
 export async function queryGeminiAgent({
   systemInstruction,
@@ -57,19 +93,29 @@ export async function queryGeminiAgent({
   apiKey = null,
   model = null,
 }) {
-  const effectiveKey = apiKey || getStoredApiKey();
+  const currentKey = apiKey || getStoredApiKey();
+  const previousKey = getPreviousApiKey();
   const effectiveModel = model || getSelectedModel();
 
-  // If no Gemini API key is configured, invoke the intelligent dynamic ReAct local solver
-  if (!effectiveKey) {
+  // Determine candidate keys in order of priority:
+  // 1. Current key (if entered)
+  // 2. Previous working key (if different and available)
+  const candidateKeys = [];
+  if (currentKey) {
+    candidateKeys.push({ key: currentKey, label: "Current API Key" });
+  }
+  if (previousKey && previousKey !== currentKey) {
+    candidateKeys.push({ key: previousKey, label: "Previous Working API Key" });
+  }
+
+  // If NO keys exist at all, fall back to intelligent local dynamic solver
+  if (candidateKeys.length === 0) {
     return {
       source: "local_dynamic_react",
       model: "PulseAgent Dynamic Engine",
       decision: await runDynamicLocalPlanner(conversationHistory, tools),
     };
   }
-
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${effectiveModel}:generateContent?key=${effectiveKey}`;
 
   // Format Gemini request payload
   const contents = conversationHistory.map((item) => {
@@ -127,64 +173,76 @@ export async function queryGeminiAgent({
     payload.tools = [{ function_declarations: tools }];
   }
 
-  try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+  let lastErrorText = "";
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.warn(`[Gemini API HTTP ${response.status}]:`, errText.slice(0, 200));
-      // Fallback gracefully to dynamic planner if key exhausted or rate limited
-      return {
-        source: "local_dynamic_react",
-        model: "PulseAgent Dynamic Engine (Failover)",
-        warning: `Gemini API returned ${response.status}. Switched seamlessly to local dynamic solver.`,
-        decision: await runDynamicLocalPlanner(conversationHistory, tools),
-      };
+  // Attempt requests across candidate keys (Current Key -> Previous Key)
+  for (let i = 0; i < candidateKeys.length; i++) {
+    const { key: activeKey, label } = candidateKeys[i];
+
+    try {
+      const response = await sendGeminiRequest(activeKey, effectiveModel, payload);
+
+      if (response.ok) {
+        const data = await response.json();
+        // Remember this key as verified working previous key
+        saveWorkingApiKey(activeKey);
+
+        const candidate = data.candidates?.[0];
+        const parts = candidate?.content?.parts || [];
+
+        // Check for function/tool call
+        const functionCallPart = parts.find((p) => p.functionCall);
+        if (functionCallPart) {
+          const textPart = parts.find((p) => p.text);
+          return {
+            source: "gemini_live",
+            model: effectiveModel,
+            keySource: label,
+            decision: {
+              type: "tool_call",
+              tool: functionCallPart.functionCall.name,
+              args: functionCallPart.functionCall.args || {},
+              thought: textPart?.text || "Selecting tool based on latest observations.",
+            },
+          };
+        }
+
+        // Final answer
+        const textOutput = parts.map((p) => p.text || "").join("\n").trim();
+        return {
+          source: "gemini_live",
+          model: effectiveModel,
+          keySource: label,
+          decision: {
+            type: "final",
+            text: textOutput || "Analysis and actions executed successfully.",
+          },
+        };
+      } else {
+        lastErrorText = await response.text().catch(() => "");
+        console.warn(`[Gemini API HTTP ${response.status} using ${label}]:`, lastErrorText.slice(0, 180));
+
+        // If there is another candidate key (e.g. Previous API key), loop continues and immediately retries!
+        if (i < candidateKeys.length - 1) {
+          console.warn(`[Gemini Key Failover]: Current key failed (${response.status}). Automatically retrying with previous API key...`);
+        }
+      }
+    } catch (err) {
+      console.warn(`[Gemini Network Exception using ${label}]:`, err);
+      lastErrorText = err.message || "Network exception";
+      if (i < candidateKeys.length - 1) {
+        console.warn(`[Gemini Key Failover]: Automatically retrying with previous API key...`);
+      }
     }
-
-    const data = await response.json();
-    const candidate = data.candidates?.[0];
-    const parts = candidate?.content?.parts || [];
-
-    // Check for tool call
-    const functionCallPart = parts.find((p) => p.functionCall);
-    if (functionCallPart) {
-      const textPart = parts.find((p) => p.text);
-      return {
-        source: "gemini_live",
-        model: effectiveModel,
-        decision: {
-          type: "tool_call",
-          tool: functionCallPart.functionCall.name,
-          args: functionCallPart.functionCall.args || {},
-          thought: textPart?.text || "Selecting tool based on latest observations.",
-        },
-      };
-    }
-
-    // Otherwise model returned a final answer
-    const textOutput = parts.map((p) => p.text || "").join("\n").trim();
-    return {
-      source: "gemini_live",
-      model: effectiveModel,
-      decision: {
-        type: "final",
-        text: textOutput || "Analysis and actions executed successfully.",
-      },
-    };
-  } catch (err) {
-    console.warn("[Gemini API Call Exception]:", err);
-    return {
-      source: "local_dynamic_react",
-      model: "PulseAgent Dynamic Engine (Failover)",
-      warning: "Network exception reaching Gemini API. Seamless local dynamic execution.",
-      decision: await runDynamicLocalPlanner(conversationHistory, tools),
-    };
   }
+
+  // If all keys failed (or were rate-limited), fallback seamlessly to local dynamic solver
+  return {
+    source: "local_dynamic_react",
+    model: "PulseAgent Dynamic Engine (Failover)",
+    warning: `API keys exhausted or unavailable (${lastErrorText.slice(0, 100)}). Automatically fell back to local dynamic ReAct solver.`,
+    decision: await runDynamicLocalPlanner(conversationHistory, tools),
+  };
 }
 
 /**

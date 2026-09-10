@@ -20,6 +20,7 @@ import { agentAudit } from "../lib/agent/agentAudit";
 import { AGENT_EVENT_TYPES } from "../lib/agent/agentTypes";
 import {
   getStoredApiKey,
+  getPreviousApiKey,
   setStoredApiKey,
   getSelectedModel,
   setSelectedModel,
@@ -188,7 +189,9 @@ export default function AgenticCopilot({ isOpen, onToggle }) {
     };
   });
 
-  const hasApiKey = Boolean(getStoredApiKey());
+  const hasActiveKey = Boolean(getStoredApiKey());
+  const previousKey = getPreviousApiKey();
+  const hasPreviousKey = Boolean(previousKey);
 
   return (
     <>
@@ -237,7 +240,11 @@ export default function AgenticCopilot({ isOpen, onToggle }) {
                 </span>
                 <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  {hasApiKey ? "Gemini Live" : "Dynamic Engine"}
+                  {hasActiveKey
+                    ? "Gemini Live"
+                    : hasPreviousKey
+                    ? "Previous Key Active"
+                    : "Dynamic Engine"}
                 </span>
               </div>
               <p className="text-[11px] text-gray-500">Autonomous reasoning loop (Observe → Decide → Act → Evaluate → Adapt)</p>
@@ -296,7 +303,7 @@ export default function AgenticCopilot({ isOpen, onToggle }) {
                 <div className="flex items-center justify-between mb-1">
                   <label className="text-[11px] font-semibold text-gray-700 flex items-center gap-1">
                     <Key size={12} className="text-gray-400" />
-                    <span>Gemini API Key (Optional):</span>
+                    <span>Gemini API Key:</span>
                   </label>
                   <button
                     type="button"
@@ -311,13 +318,27 @@ export default function AgenticCopilot({ isOpen, onToggle }) {
                   type={showKey ? "text" : "password"}
                   value={apiKeyInput}
                   onChange={(e) => setApiKeyInput(e.target.value)}
-                  placeholder="Paste AIzaSy... (or leave blank for dynamic demo engine)"
+                  placeholder="Paste AIzaSy... (or leave blank to use previous key)"
                   className="w-full px-2.5 py-1.5 rounded-lg border border-gray-300 bg-white text-xs focus:outline-none focus:border-[#4E6ABF] font-mono"
                 />
                 <p className="text-[10px] text-gray-500 mt-1">
-                  Leave blank to evaluate with the built-in dynamic ReAct engine (100% offline & demo guaranteed).
+                  {hasPreviousKey
+                    ? "⚡ Auto-Failover: If empty or if a new key fails, PulseAgent automatically sends requests to your previous working API key."
+                    : "Leave blank to evaluate with the built-in dynamic ReAct engine (100% offline & demo guaranteed)."}
                 </p>
               </div>
+
+              {hasPreviousKey && (
+                <div className="p-2 rounded-lg bg-emerald-50/80 border border-emerald-200 text-[11px] text-emerald-900 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
+                    <span className="font-semibold">Previous Working Key Saved:</span>
+                  </div>
+                  <span className="font-mono text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-bold">
+                    {previousKey.slice(0, 6)}...{previousKey.slice(-4)}
+                  </span>
+                </div>
+              )}
 
               <div className="flex items-center justify-between pt-1">
                 {isSavedNotice ? (
