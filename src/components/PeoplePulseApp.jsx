@@ -972,12 +972,31 @@ export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoT
 
     try {
       if (mode === "signup") {
-        if (!name.trim()) {
+        const cleanName = name.trim();
+        if (!cleanName) {
           setAuthError("Please enter your full name.");
           setLoading(false);
           return;
         }
+        if (cleanName.length > 100) {
+          setAuthError("Name is too long. Please enter a name under 100 characters.");
+          setLoading(false);
+          return;
+        }
+
         const cleanEmail = email.trim().toLowerCase();
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!cleanEmail || !emailRegex.test(cleanEmail)) {
+          setAuthError("Please enter a valid work email address (e.g., name@company.com).");
+          setLoading(false);
+          return;
+        }
+
+        if (password.length < 6) {
+          setAuthError("Password must be at least 6 characters long.");
+          setLoading(false);
+          return;
+        }
 
         // Fast client check: prevent duplicate accounts before dispatching
         const exists = await checkAccountExists?.(cleanEmail);
@@ -989,7 +1008,7 @@ export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoT
           return;
         }
 
-        const signupRes = await signUp(cleanEmail, password, { name: name.trim(), role: "admin" });
+        const signupRes = await signUp(cleanEmail, password, { name: cleanName, role: "admin" });
         if (signupRes?.user) {
           // Double safeguard: Supabase empty identities array signals duplicate account
           if (signupRes.user.identities && signupRes.user.identities.length === 0) {
@@ -1025,32 +1044,65 @@ export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoT
           setLoading(false);
           return;
         }
+        if (identifier.length > 150) {
+          setAuthError("Identifier is too long. Please enter a valid email or Employee ID.");
+          setLoading(false);
+          return;
+        }
         const result = await signIn(identifier, password);
         const userRole = result?.profile?.role || "employee";
         onSignIn?.(userRole, { isDemo: false, profile: result?.profile });
       }
     } catch (err) {
       console.error("[Auth Error]", err);
-      const msg = err.message || "";
+      const msg = (err.message || "").toLowerCase();
+      
+      // Edge Case: Internet disconnected or fetch network failure
       if (
+        !navigator.onLine ||
+        msg.includes("failed to fetch") ||
+        msg.includes("networkerror") ||
+        msg.includes("network request failed") ||
+        msg.includes("abort")
+      ) {
+        setAuthError("Network error: You appear to be offline or the connection was interrupted. Please check your internet connection and try again.");
+      } else if (
         err.isDuplicateAccount ||
-        msg.toLowerCase().includes("already registered") ||
-        msg.toLowerCase().includes("already exists") ||
-        msg.toLowerCase().includes("already been registered") ||
-        msg.toLowerCase().includes("duplicate")
+        msg.includes("already registered") ||
+        msg.includes("already exists") ||
+        msg.includes("already been registered") ||
+        msg.includes("duplicate")
       ) {
         setIsDuplicateAccountError(true);
         setDuplicateEmail((email || err.email || "").trim().toLowerCase());
         setAuthError("An account with this email address already exists. Please sign in or reset your password.");
-      } else if (msg.toLowerCase().includes("email not confirmed") || msg.toLowerCase().includes("email_not_confirmed")) {
+      } else if (
+        msg.includes("invalid login credentials") ||
+        msg.includes("invalid_grant") ||
+        msg.includes("wrong password") ||
+        msg.includes("invalid password")
+      ) {
+        setAuthError("Incorrect password or email. Please double-check your credentials or use 'Forgot password?'.");
+      } else if (msg.includes("email not confirmed") || msg.includes("email_not_confirmed")) {
         const targetEmail = (err.resolvedEmail || (mode === "employee" ? (employeeId || email) : email)).trim().toLowerCase();
         setPendingVerificationEmail(targetEmail);
         setVerificationCode("");
         setAuthError("Your email has not been verified yet. Please enter the 6-digit verification code from your email or click the link sent to your inbox.");
-      } else if (msg.toLowerCase().includes("rate limit")) {
-        setAuthError("Email rate limit reached. Please wait a few minutes before requesting another verification email.");
+      } else if (msg.includes("rate limit") || msg.includes("too many requests") || msg.includes("429")) {
+        setAuthError("Too many attempts. For security reasons, please wait a few moments before trying again.");
+      } else if (
+        msg.includes("500") ||
+        msg.includes("502") ||
+        msg.includes("503") ||
+        msg.includes("504") ||
+        msg.includes("internal server error") ||
+        msg.includes("server error") ||
+        msg.includes("database error") ||
+        msg.includes("service unavailable")
+      ) {
+        setAuthError("The service is experiencing high load or undergoing maintenance. Please wait a moment and try again.");
       } else {
-        setAuthError(msg || "Authentication failed. Please verify your credentials.");
+        setAuthError(err.message || "Authentication failed. Please verify your credentials.");
       }
     } finally {
       setLoading(false);
