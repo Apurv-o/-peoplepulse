@@ -33,16 +33,36 @@ Deno.serve(async (req) => {
       );
     }
 
-    const cleanEmail = email.trim().toLowerCase();
-    const userName = (name || "").trim() || cleanEmail.split("@")[0] || "there";
-    const userRole = (role || "").trim() || "admin";
+    const cleanEmail = (email || "").trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!cleanEmail || !emailRegex.test(cleanEmail)) {
+      return new Response(
+        JSON.stringify({ error: "Invalid email address format." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // HTML escape helper to prevent HTML injection in generated email templates
+    const escapeHtml = (str: string): string =>
+      str
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+
+    const rawName = (name || "").trim() || cleanEmail.split("@")[0] || "there";
+    const userName = escapeHtml(rawName.slice(0, 100));
+    const userRole = ["admin", "manager", "employee"].includes((role || "").trim().toLowerCase())
+      ? (role || "admin").trim().toLowerCase()
+      : "admin";
 
     const adminClient = createClient(supabaseUrl, supabaseServiceKey, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
     let redirectTarget = "https://peoplepulse-app.vercel.app/#email-confirmed";
-    if (redirectTo) {
+    if (redirectTo && (redirectTo.startsWith("https://") || redirectTo.startsWith("http://"))) {
       redirectTarget = redirectTo.replace("peoplepulse-n-8650.vercel.app", "peoplepulse-app.vercel.app");
     }
 
@@ -235,8 +255,10 @@ Deno.serve(async (req) => {
     );
   } catch (err: any) {
     console.error("[send-verification-email] Unexpected error:", err);
+    // Sanitize error: do not expose internal database error details
+    const isUserFriendly = err.message && !err.message.includes("violates") && !err.message.includes("relation") && !err.message.includes("column");
     return new Response(
-      JSON.stringify({ error: err.message || "Internal server error" }),
+      JSON.stringify({ error: isUserFriendly ? err.message : "Failed to process verification email. Please try again." }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

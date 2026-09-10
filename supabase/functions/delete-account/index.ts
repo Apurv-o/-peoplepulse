@@ -309,7 +309,7 @@ Deno.serve(async (req) => {
   } catch (err: any) {
     console.error("[delete-account] Error:", err);
     return new Response(
-      JSON.stringify({ error: err?.message || "Failed to delete account" }),
+      JSON.stringify({ error: "Failed to process account deletion securely. Please try again or contact support." }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

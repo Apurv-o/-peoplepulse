@@ -31,7 +31,14 @@ Deno.serve(async (req) => {
       );
     }
 
-    const cleanEmail = email.trim().toLowerCase();
+    const cleanEmail = (email || "").trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!cleanEmail || !emailRegex.test(cleanEmail)) {
+      return new Response(
+        JSON.stringify({ error: "Invalid email address format." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     // 1. Generate recovery link using admin client
     const adminClient = createClient(supabaseUrl, supabaseServiceKey, {
@@ -42,7 +49,7 @@ Deno.serve(async (req) => {
     // otherwise GoTrue appends #access_token=..., creating an invalid double-hash (#...#access_token=...)
     // which prevents the client from parsing session tokens and leads to "Auth session missing!".
     let redirectTarget = "https://peoplepulse-app.vercel.app/?type=recovery";
-    if (redirectTo) {
+    if (redirectTo && (redirectTo.startsWith("https://") || redirectTo.startsWith("http://"))) {
       const cleanRedirect = redirectTo.split("#")[0].replace("peoplepulse-n-8650.vercel.app", "peoplepulse-app.vercel.app");
       const sep = cleanRedirect.includes("?") ? "&" : "?";
       redirectTarget = cleanRedirect.includes("type=recovery") ? cleanRedirect : `${cleanRedirect}${sep}type=recovery`;
@@ -229,7 +236,7 @@ Deno.serve(async (req) => {
   } catch (err) {
     console.error("[send-reset-password] Uncaught error:", err);
     return new Response(
-      JSON.stringify({ error: (err as Error).message }),
+      JSON.stringify({ error: "Failed to dispatch password recovery email. Please try again." }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

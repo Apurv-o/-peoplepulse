@@ -7274,13 +7274,29 @@ function AdminImports({ setMobileOpen }) {
     });
   };
 
+  const MAX_CSV_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
+
   const handleFileSelect = (e) => {
     const selectedFile = e.target.files?.[0];
     if (!selectedFile) return;
+
+    if (!selectedFile.name.toLowerCase().endsWith(".csv")) {
+      setImportNotice({ type: "error", message: "Invalid file format. Please select a valid .csv file." });
+      return;
+    }
+
+    if (selectedFile.size > MAX_CSV_SIZE_BYTES) {
+      setImportNotice({ type: "error", message: "File is too large. Maximum CSV file size is 5MB." });
+      return;
+    }
+
     setFile(selectedFile);
     const reader = new FileReader();
     reader.onload = (event) => {
       parseCSVText(event.target?.result || "");
+    };
+    reader.onerror = () => {
+      setImportNotice({ type: "error", message: "Failed to read file contents securely." });
     };
     reader.readAsText(selectedFile);
   };
@@ -7289,16 +7305,27 @@ function AdminImports({ setMobileOpen }) {
     e.preventDefault();
     setIsDragging(false);
     const droppedFile = e.dataTransfer.files?.[0];
-    if (droppedFile && droppedFile.name.toLowerCase().endsWith(".csv")) {
-      setFile(droppedFile);
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        parseCSVText(event.target?.result || "");
-      };
-      reader.readAsText(droppedFile);
-    } else {
-      setImportNotice({ type: "error", message: "Please upload a valid .csv file." });
+    if (!droppedFile) return;
+
+    if (!droppedFile.name.toLowerCase().endsWith(".csv")) {
+      setImportNotice({ type: "error", message: "Invalid file format. Please upload a valid .csv file." });
+      return;
     }
+
+    if (droppedFile.size > MAX_CSV_SIZE_BYTES) {
+      setImportNotice({ type: "error", message: "File is too large. Maximum CSV file size is 5MB." });
+      return;
+    }
+
+    setFile(droppedFile);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      parseCSVText(event.target?.result || "");
+    };
+    reader.onerror = () => {
+      setImportNotice({ type: "error", message: "Failed to read file contents securely." });
+    };
+    reader.readAsText(droppedFile);
   };
 
   const handleExecuteImport = async () => {

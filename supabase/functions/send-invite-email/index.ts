@@ -46,7 +46,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // 2. Parse request payload
+    // 2. Parse request payload and sanitize user inputs
     const body: InviteEmailPayload = await req.json().catch(() => ({}));
     const { email, link, role, orgName, teamName } = body;
 
@@ -56,6 +56,42 @@ Deno.serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    // Input validation: email format and link safety
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      return new Response(
+        JSON.stringify({ error: "Invalid email address format." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Ensure link uses http or https to prevent javascript: or data: URIs
+    if (!link.startsWith("https://") && !link.startsWith("http://")) {
+      return new Response(
+        JSON.stringify({ error: "Invalid invite link protocol." }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // HTML escape helper to sanitize user-generated text
+    const escapeHtml = (str: string): string =>
+      str
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+
+    const safeRole = ["admin", "manager", "employee"].includes((role || "").toLowerCase())
+      ? (role || "employee").toLowerCase()
+      : "employee";
+    const roleTitle = safeRole.charAt(0).toUpperCase() + safeRole.slice(1);
+    const organizationName = escapeHtml(orgName || "your team");
+    const safeLink = encodeURI(link);
+    const teamNotice = teamName
+      ? `<p style="margin: 0 0 16px 0; color: #4b5563; font-size: 14px;"><strong>Assigned Team:</strong> ${escapeHtml(teamName)}</p>`
+      : "";
 
     if (!brevoApiKey && !resendApiKey) {
       console.warn("[send-invite-email] Neither BREVO_API_KEY nor RESEND_INVITE_API_KEY is configured.");
@@ -67,10 +103,6 @@ Deno.serve(async (req) => {
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
-    const roleTitle = (role || "employee").charAt(0).toUpperCase() + (role || "employee").slice(1);
-    const organizationName = orgName || "your team";
-    const teamNotice = teamName ? `<p style="margin: 0 0 16px 0; color: #4b5563; font-size: 14px;"><strong>Assigned Team:</strong> ${teamName}</p>` : "";
 
     const htmlContent = `
 <!DOCTYPE html>
@@ -99,14 +131,14 @@ Deno.serve(async (req) => {
     </div>
 
     <div style="text-align: center; margin: 32px 0 24px 0;">
-      <a href="${link}" target="_blank" style="background-color: #4e6abf; color: #ffffff; padding: 14px 28px; font-size: 15px; font-weight: 700; text-decoration: none; border-radius: 10px; display: inline-block; box-shadow: 0 2px 4px rgba(78, 106, 191, 0.3);">
+      <a href="${safeLink}" target="_blank" style="background-color: #4e6abf; color: #ffffff; padding: 14px 28px; font-size: 15px; font-weight: 700; text-decoration: none; border-radius: 10px; display: inline-block; box-shadow: 0 2px 4px rgba(78, 106, 191, 0.3);">
         Accept Invitation &amp; Join &rarr;
       </a>
     </div>
 
     <p style="margin: 24px 0 0 0; font-size: 12px; color: #9ca3af; text-align: center; word-break: break-all;">
       Or copy and paste this link in your browser:<br>
-      <a href="${link}" style="color: #4e6abf; text-decoration: underline;">${link}</a>
+      <a href="${safeLink}" style="color: #4e6abf; text-decoration: underline;">${escapeHtml(safeLink)}</a>
     </p>
 
     <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 32px 0 20px 0;">
@@ -154,11 +186,11 @@ Deno.serve(async (req) => {
           );
         } else {
           console.warn("[send-invite-email] Brevo error:", brevoData);
-          lastError = brevoData;
+          lastError = "Delivery provider temporarily unavailable.";
         }
       } catch (brevoErr) {
         console.warn("[send-invite-email] Brevo exception:", (brevoErr as Error).message);
-        lastError = (brevoErr as Error).message;
+        lastError = "Delivery provider connection issue.";
       }
     }
 
@@ -192,10 +224,10 @@ Deno.serve(async (req) => {
             { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         } else {
-          lastError = resendData;
+          lastError = "Delivery provider temporarily unavailable.";
         }
       } catch (resendErr) {
-        lastError = (resendErr as Error).message;
+        lastError = "Delivery provider connection issue.";
       }
     }
 
@@ -210,7 +242,7 @@ Deno.serve(async (req) => {
   } catch (err) {
     console.error("[send-invite-email Unexpected Error]", (err as Error).message);
     return new Response(
-      JSON.stringify({ error: "Internal server error: " + (err as Error).message }),
+      JSON.stringify({ error: "Internal server error" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
