@@ -788,6 +788,7 @@ export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoT
   const {
     signIn,
     signUp,
+    checkAccountExists,
     verifyEmailOtp,
     resendVerificationEmail,
     resetPassword,
@@ -803,6 +804,8 @@ export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoT
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [authError, setAuthError] = useState(null);
+  const [isDuplicateAccountError, setIsDuplicateAccountError] = useState(false);
+  const [duplicateEmail, setDuplicateEmail] = useState("");
   const [resetSuccess, setResetSuccess] = useState(false);
   const [signupSuccess, setSignupSuccess] = useState(false);
 
@@ -964,6 +967,9 @@ export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoT
     }
 
     setLoading(true);
+    setAuthError(null);
+    setIsDuplicateAccountError(false);
+
     try {
       if (mode === "signup") {
         if (!name.trim()) {
@@ -972,8 +978,28 @@ export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoT
           return;
         }
         const cleanEmail = email.trim().toLowerCase();
+
+        // Fast client check: prevent duplicate accounts before dispatching
+        const exists = await checkAccountExists?.(cleanEmail);
+        if (exists) {
+          setIsDuplicateAccountError(true);
+          setDuplicateEmail(cleanEmail);
+          setAuthError("An account with this email address already exists. Please sign in or reset your password.");
+          setLoading(false);
+          return;
+        }
+
         const signupRes = await signUp(cleanEmail, password, { name: name.trim(), role: "admin" });
         if (signupRes?.user) {
+          // Double safeguard: Supabase empty identities array signals duplicate account
+          if (signupRes.user.identities && signupRes.user.identities.length === 0) {
+            setIsDuplicateAccountError(true);
+            setDuplicateEmail(cleanEmail);
+            setAuthError("An account with this email address already exists. Please sign in or reset your password.");
+            setLoading(false);
+            return;
+          }
+
           // When email verification is active, session is null until verified
           if (!signupRes.session) {
             setPendingVerificationEmail(cleanEmail);
@@ -1006,7 +1032,17 @@ export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoT
     } catch (err) {
       console.error("[Auth Error]", err);
       const msg = err.message || "";
-      if (msg.toLowerCase().includes("email not confirmed") || msg.toLowerCase().includes("email_not_confirmed")) {
+      if (
+        err.isDuplicateAccount ||
+        msg.toLowerCase().includes("already registered") ||
+        msg.toLowerCase().includes("already exists") ||
+        msg.toLowerCase().includes("already been registered") ||
+        msg.toLowerCase().includes("duplicate")
+      ) {
+        setIsDuplicateAccountError(true);
+        setDuplicateEmail((email || err.email || "").trim().toLowerCase());
+        setAuthError("An account with this email address already exists. Please sign in or reset your password.");
+      } else if (msg.toLowerCase().includes("email not confirmed") || msg.toLowerCase().includes("email_not_confirmed")) {
         const targetEmail = (err.resolvedEmail || (mode === "employee" ? (employeeId || email) : email)).trim().toLowerCase();
         setPendingVerificationEmail(targetEmail);
         setVerificationCode("");
@@ -1019,6 +1055,20 @@ export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoT
     } finally {
       setLoading(false);
     }
+  };
+
+  // Real-time blur validation to proactively catch duplicate accounts
+  const handleEmailBlur = async () => {
+    if (mode !== "signup" || !email.trim() || !email.includes("@")) return;
+    const cleanEmail = email.trim().toLowerCase();
+    try {
+      const exists = await checkAccountExists?.(cleanEmail);
+      if (exists) {
+        setIsDuplicateAccountError(true);
+        setDuplicateEmail(cleanEmail);
+        setAuthError("An account with this email address already exists. Please sign in or reset your password.");
+      }
+    } catch (e) {}
   };
 
   // Quick Demo Access Handler (Explicitly Frontend Simulation)
@@ -1187,8 +1237,8 @@ export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoT
               <div className="flex rounded-xl bg-gray-200/70 p-1 mb-6">
                 <button
                   type="button"
-                  onClick={() => { setMode("login"); setAuthError(null); }}
-                  className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all duration-200 ${
+                  onClick={() => { setMode("login"); setAuthError(null); setIsDuplicateAccountError(false); }}
+                  className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all duration-200 cursor-pointer ${
                     mode === "login" ? "bg-white text-[#1F2A28] shadow-sm" : "text-gray-500 hover:text-gray-900"
                   }`}
                 >
@@ -1196,8 +1246,8 @@ export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoT
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setMode("employee"); setAuthError(null); }}
-                  className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all duration-200 ${
+                  onClick={() => { setMode("employee"); setAuthError(null); setIsDuplicateAccountError(false); }}
+                  className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all duration-200 cursor-pointer ${
                     mode === "employee" ? "bg-white text-[#1F2A28] shadow-sm" : "text-gray-500 hover:text-gray-900"
                   }`}
                 >
@@ -1205,8 +1255,8 @@ export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoT
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setMode("signup"); setAuthError(null); }}
-                  className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all duration-200 ${
+                  onClick={() => { setMode("signup"); setAuthError(null); setIsDuplicateAccountError(false); }}
+                  className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all duration-200 cursor-pointer ${
                     mode === "signup" ? "bg-white text-[#1F2A28] shadow-sm" : "text-gray-500 hover:text-gray-900"
                   }`}
                 >
@@ -1230,12 +1280,52 @@ export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoT
               </p>
 
               {/* Feedback Messages */}
-              {authError && (
-                <div className="mb-4 p-3 rounded-xl text-xs bg-red-50 border border-red-200 text-red-700 leading-relaxed flex items-start gap-2">
+              {isDuplicateAccountError ? (
+                <div className="mb-5 p-4 rounded-2xl bg-amber-50/90 border border-amber-200 text-amber-950 text-xs shadow-xs animate-in fade-in duration-200 space-y-2.5">
+                  <div className="flex items-start gap-2.5">
+                    <div className="w-6 h-6 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center shrink-0 mt-0.5">
+                      <AlertCircle size={14} />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-bold text-sm text-amber-900">Account Already Exists</p>
+                      <p className="text-amber-800 text-xs mt-0.5 leading-relaxed">
+                        An account registered with <b className="font-semibold text-amber-950 break-all">{duplicateEmail || email}</b> is already active. To prevent duplicate accounts, you cannot register this email again.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-amber-200/70">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMode("login");
+                        setEmail(duplicateEmail || email);
+                        setIsDuplicateAccountError(false);
+                        setAuthError(null);
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-[#4E6ABF] text-white font-semibold text-xs hover:bg-[#344A91] transition-all cursor-pointer shadow-xs flex items-center gap-1.5"
+                    >
+                      Sign In with this email →
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setForgotEmail(duplicateEmail || email);
+                        setIsDuplicateAccountError(false);
+                        setAuthError(null);
+                        setShowForgotModal(true);
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-white border border-amber-300 text-amber-900 font-semibold text-xs hover:bg-amber-100/60 transition-all cursor-pointer"
+                    >
+                      Forgot Password?
+                    </button>
+                  </div>
+                </div>
+              ) : authError ? (
+                <div className="mb-4 p-3.5 rounded-xl text-xs bg-red-50 border border-red-200 text-red-700 leading-relaxed flex items-start gap-2">
                   <AlertCircle size={14} className="shrink-0 mt-0.5" />
                   <span>{authError}</span>
                 </div>
-              )}
+              ) : null}
               {resetSuccess && (
                 <div className="mb-4 p-3 rounded-xl text-xs bg-green-50 border border-green-200 text-green-700 leading-relaxed">
                   Password reset link sent to your email.
@@ -1288,7 +1378,14 @@ export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoT
                     <input
                       type={mode === "signup" ? "email" : "text"}
                       value={email}
-                      onChange={(e) => setEmail(e.target.value)}
+                      onChange={(e) => {
+                        setEmail(e.target.value);
+                        if (isDuplicateAccountError) {
+                          setIsDuplicateAccountError(false);
+                          setAuthError(null);
+                        }
+                      }}
+                      onBlur={handleEmailBlur}
                       placeholder="you@company.com"
                       required
                       className="w-full px-3.5 py-2.5 rounded-xl border text-sm outline-none focus:ring-2 bg-white transition-all"
@@ -1324,7 +1421,7 @@ export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoT
                     <button
                       type="button"
                       onClick={() => setShowPassword((prev) => !prev)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none p-1 transition-colors flex items-center justify-center"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 focus:outline-none p-1 transition-colors flex items-center justify-center cursor-pointer"
                       aria-label={showPassword ? "Hide password" : "Show password"}
                       title={showPassword ? "Hide password" : "Show password"}
                     >
@@ -1340,16 +1437,21 @@ export function LoginView({ onSignIn, onReturnHome, initialMode = "login", onGoT
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full py-3 rounded-xl text-sm font-semibold text-white mt-2 transition-all hover:shadow-lg active:translate-y-0.5 disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="w-full py-3 rounded-xl text-sm font-semibold text-white mt-2 transition-all hover:shadow-lg active:translate-y-0.5 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
                   style={{ background: T.primary }}
                 >
-                  {loading
-                    ? "Processing..."
-                    : mode === "signup"
-                    ? "Continue to Organization Setup →"
-                    : mode === "employee"
-                    ? "Sign in as Employee →"
-                    : "Sign in to Dashboard →"}
+                  {loading ? (
+                    <>
+                      <RotateCw size={15} className="animate-spin" />
+                      <span>Processing...</span>
+                    </>
+                  ) : mode === "signup" ? (
+                    "Continue to Organization Setup →"
+                  ) : mode === "employee" ? (
+                    "Sign in as Employee →"
+                  ) : (
+                    "Sign in to Dashboard →"
+                  )}
                 </button>
               </form>
 
@@ -5632,13 +5734,35 @@ function AdminEmployees({ setMobileOpen }) {
     }
   };
 
+  const cleanInviteEmail = inviteEmail.trim().toLowerCase();
+  const isExistingMember = Boolean(
+    cleanInviteEmail &&
+    members.some((m) => (m.profiles?.email || "").trim().toLowerCase() === cleanInviteEmail)
+  );
+  const existingPendingInvite = cleanInviteEmail
+    ? invitations.find(
+        (i) => (i.email || "").trim().toLowerCase() === cleanInviteEmail && !i.accepted_at
+      )
+    : null;
+
   const handleSendInvite = async (e) => {
     e.preventDefault();
     setInviteError(null);
-    setInviteLoading(true);
     setEmailDispatchedNotice(null);
+
+    const trimmedEmail = inviteEmail.trim().toLowerCase();
+    if (!trimmedEmail || !trimmedEmail.includes("@")) {
+      setInviteError("Please enter a valid email address.");
+      return;
+    }
+
+    if (isExistingMember) {
+      setInviteError("This user is already an active member of this organization. Duplicate accounts or memberships are not permitted.");
+      return;
+    }
+
+    setInviteLoading(true);
     try {
-      const trimmedEmail = inviteEmail.trim();
       const res = await sendInvitation({
         email: trimmedEmail,
         role: inviteRole,
@@ -5844,7 +5968,7 @@ function AdminEmployees({ setMobileOpen }) {
             if (e.target === e.currentTarget) setShowInviteModal(false);
           }}
         >
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl relative modal-dialog border border-gray-100">
+          <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-4 sm:p-6 shadow-2xl relative modal-dialog border border-gray-100">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
@@ -5932,10 +6056,37 @@ function AdminEmployees({ setMobileOpen }) {
                     required
                     placeholder="colleague@company.com"
                     value={inviteEmail}
-                    onChange={(e) => setInviteEmail(e.target.value)}
+                    onChange={(e) => {
+                      setInviteEmail(e.target.value);
+                      if (inviteError) setInviteError(null);
+                    }}
                     className="w-full px-3 py-2 rounded-xl border text-sm outline-none focus:ring-2 bg-white"
-                    style={{ borderColor: T.border }}
+                    style={{ borderColor: isExistingMember ? "#F59E0B" : T.border }}
                   />
+                  {isExistingMember && (
+                    <div className="mt-2 p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center gap-2 animate-in fade-in">
+                      <AlertCircle size={14} className="text-amber-600 shrink-0" />
+                      <span>This user is already an active member of this organization.</span>
+                    </div>
+                  )}
+                  {existingPendingInvite && !isExistingMember && (
+                    <div className="mt-2 p-2.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-xs flex items-center justify-between gap-2 animate-in fade-in">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <AlertCircle size={14} className="text-blue-600 shrink-0" />
+                        <span className="truncate">A pending invite already exists for this email.</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowInviteModal(false);
+                          handleResendInvite(existingPendingInvite);
+                        }}
+                        className="shrink-0 text-[11px] font-bold text-blue-700 hover:text-blue-900 underline cursor-pointer"
+                      >
+                        Renew Invite →
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -5983,7 +6134,7 @@ function AdminEmployees({ setMobileOpen }) {
                   </button>
                   <button
                     type="submit"
-                    disabled={inviteLoading}
+                    disabled={inviteLoading || isExistingMember}
                     className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50 flex items-center justify-center gap-1.5 transition-all hover:shadow-md cursor-pointer"
                     style={{ background: T.primary }}
                   >
@@ -6957,6 +7108,49 @@ function AdminImports({ setMobileOpen }) {
   const [importProgress, setImportProgress] = useState(null);
   const [importNotice, setImportNotice] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [existingOrgEmails, setExistingOrgEmails] = useState(new Set());
+
+  // Pre-load existing member and pending invitation emails to prevent duplicate accounts
+  useEffect(() => {
+    if (!supabase || !activeOrganizationId) return;
+    let isMounted = true;
+    async function loadOrgEmails() {
+      try {
+        const [
+          { data: mData },
+          { data: iData }
+        ] = await Promise.all([
+          supabase
+            .from("organization_members")
+            .select("profiles(email)")
+            .eq("organization_id", activeOrganizationId)
+            .eq("is_active", true),
+          supabase
+            .from("invitations")
+            .select("email")
+            .eq("organization_id", activeOrganizationId)
+            .is("accepted_at", null)
+            .gt("expires_at", new Date().toISOString())
+        ]);
+
+        if (!isMounted) return;
+        const emailSet = new Set();
+        (mData || []).forEach((m) => {
+          if (m.profiles?.email) emailSet.add(m.profiles.email.trim().toLowerCase());
+        });
+        (iData || []).forEach((i) => {
+          if (i.email) emailSet.add(i.email.trim().toLowerCase());
+        });
+        setExistingOrgEmails(emailSet);
+      } catch (err) {
+        console.warn("[AdminImports] Notice loading existing emails:", err);
+      }
+    }
+    loadOrgEmails();
+    return () => {
+      isMounted = false;
+    };
+  }, [activeOrganizationId]);
 
   const downloadTemplate = () => {
     const csvContent =
@@ -7016,12 +7210,14 @@ function AdminImports({ setMobileOpen }) {
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const seenInCSV = new Set();
     const rows = [];
 
     for (let i = 1; i < lines.length; i++) {
       const cols = parseLine(lines[i]);
       if (cols.length === 1 && !cols[0]) continue;
-      const email = cols[emailIdx] || "";
+      const rawEmail = cols[emailIdx] || "";
+      const cleanEmail = rawEmail.trim().toLowerCase();
       const name = nameIdx !== -1 ? cols[nameIdx] : "";
       const department = deptIdx !== -1 ? cols[deptIdx] : "";
       const team = teamIdx !== -1 ? cols[teamIdx] : "";
@@ -7029,14 +7225,27 @@ function AdminImports({ setMobileOpen }) {
       const role = ["admin", "manager", "employee"].includes(rawRole) ? rawRole : "employee";
       const jobTitle = titleIdx !== -1 ? cols[titleIdx] : "";
 
-      const isValidEmail = emailRegex.test(email.trim());
-      const isValid = isValidEmail;
-      const errorMsg = !isValidEmail ? "Invalid email address" : null;
+      const isValidEmail = emailRegex.test(cleanEmail);
+      let isValid = isValidEmail;
+      let errorMsg = !isValidEmail ? "Invalid email format" : null;
+
+      // Duplicate detection: prevent duplicate accounts from CSV or existing members
+      if (isValid) {
+        if (seenInCSV.has(cleanEmail)) {
+          isValid = false;
+          errorMsg = "Duplicate email in CSV (skipped)";
+        } else if (existingOrgEmails.has(cleanEmail)) {
+          isValid = false;
+          errorMsg = "Already an active member or pending invite";
+        } else {
+          seenInCSV.add(cleanEmail);
+        }
+      }
 
       rows.push({
         id: i,
-        name: name || (email ? email.split("@")[0] : `Employee ${i}`),
-        email: email.trim(),
+        name: name || (cleanEmail ? cleanEmail.split("@")[0] : `Employee ${i}`),
+        email: cleanEmail,
         department,
         team,
         role,
@@ -7047,9 +7256,21 @@ function AdminImports({ setMobileOpen }) {
     }
 
     setParsedRows(rows);
+    const validCount = rows.filter((r) => r.isValid).length;
+    const dupeCount = rows.filter((r) => r.error && (r.error.includes("Duplicate") || r.error.includes("Already"))).length;
+    const invalidCount = rows.length - validCount - dupeCount;
+
+    let summaryText = `Parsed ${rows.length} records: ${validCount} valid for import.`;
+    if (dupeCount > 0) {
+      summaryText += ` Filtered out ${dupeCount} duplicate/existing account(s).`;
+    }
+    if (invalidCount > 0) {
+      summaryText += ` Skipped ${invalidCount} invalid format row(s).`;
+    }
+
     setImportNotice({
-      type: "info",
-      message: `Parsed ${rows.length} records (${rows.filter((r) => r.isValid).length} valid, ${rows.filter((r) => !r.isValid).length} errors).`,
+      type: validCount > 0 ? "info" : "error",
+      message: summaryText,
     });
   };
 

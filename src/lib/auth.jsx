@@ -104,11 +104,42 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
+  // Check if an email already belongs to an existing registered account
+  const checkAccountExists = async (email) => {
+    if (!supabase || !email) return false;
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail || !cleanEmail.includes("@")) return false;
+    try {
+      const { data, error } = await supabase.rpc("check_account_exists", {
+        p_email: cleanEmail,
+      });
+      if (!error && data && typeof data.exists === "boolean") {
+        return data.exists;
+      }
+    } catch (e) {
+      console.warn("[checkAccountExists] RPC notice:", e.message);
+    }
+    return false;
+  };
+
   const signUp = async (email, password, metadata = {}) => {
     if (!isSupabaseConfigured || !supabase) {
       throw new Error("Supabase is not configured yet with valid credentials.");
     }
     const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail || !cleanEmail.includes("@")) {
+      throw new Error("Please provide a valid work email address.");
+    }
+
+    // Step 0: Fast check against existing accounts to prevent duplicate registration
+    const alreadyExists = await checkAccountExists(cleanEmail);
+    if (alreadyExists) {
+      const dupeError = new Error("An account with this email address already exists. Please sign in with your password or reset it.");
+      dupeError.isDuplicateAccount = true;
+      dupeError.email = cleanEmail;
+      throw dupeError;
+    }
+
     let origin = typeof window !== "undefined" && window.location?.origin
       ? window.location.origin
       : "https://peoplepulse-app.vercel.app";
@@ -144,9 +175,22 @@ export function AuthProvider({ children }) {
           try {
             const errBody = await fnError.context.json();
             if (errBody?.error) {
+              const errMsg = (errBody.error || "").toLowerCase();
+              if (
+                errMsg.includes("already been registered") ||
+                errMsg.includes("already registered") ||
+                errMsg.includes("already exists") ||
+                errMsg.includes("duplicate")
+              ) {
+                const dupeError = new Error("An account with this email address already exists. Please sign in with your password or reset it.");
+                dupeError.isDuplicateAccount = true;
+                dupeError.email = cleanEmail;
+                throw dupeError;
+              }
               throw new Error(errBody.error);
             }
           } catch (jsonErr) {
+            if (jsonErr.isDuplicateAccount) throw jsonErr;
             if (jsonErr.message && !jsonErr.message.includes("FunctionsHttpError")) {
               throw jsonErr;
             }
@@ -155,6 +199,7 @@ export function AuthProvider({ children }) {
         console.warn("[signUp] Edge Function notice:", fnError);
       }
     } catch (fnEx) {
+      if (fnEx.isDuplicateAccount) throw fnEx;
       if (fnEx.message && !fnEx.message.includes("FunctionsHttpError") && !fnEx.message.includes("Failed to send")) {
         throw fnEx;
       }
@@ -170,7 +215,30 @@ export function AuthProvider({ children }) {
         emailRedirectTo: redirectUrl,
       },
     });
-    if (error) throw error;
+    if (error) {
+      const msg = (error.message || "").toLowerCase();
+      if (
+        msg.includes("already registered") ||
+        msg.includes("already exists") ||
+        msg.includes("duplicate")
+      ) {
+        const dupeError = new Error("An account with this email address already exists. Please sign in with your password or reset it.");
+        dupeError.isDuplicateAccount = true;
+        dupeError.email = cleanEmail;
+        throw dupeError;
+      }
+      throw error;
+    }
+
+    // Crucial: Supabase returns identities: [] when the user already exists to prevent enumeration.
+    // In PeoplePulse, explicitly detect this to prevent duplicate accounts and avoid confusing OTP states!
+    if (data?.user && (!data.user.identities || data.user.identities.length === 0)) {
+      const dupeError = new Error("An account with this email address already exists. Please sign in with your password or reset it.");
+      dupeError.isDuplicateAccount = true;
+      dupeError.email = cleanEmail;
+      throw dupeError;
+    }
+
     return data;
   };
 
@@ -491,6 +559,7 @@ export function AuthProvider({ children }) {
         isPasswordRecovery,
         setIsPasswordRecovery,
         signUp,
+        checkAccountExists,
         verifyEmailOtp,
         resendVerificationEmail,
         signIn,
