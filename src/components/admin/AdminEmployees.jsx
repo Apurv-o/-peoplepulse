@@ -25,6 +25,7 @@ import {
   triggerEmailApp,
   triggerGmailWeb,
   dispatchInviteEmailViaBackend,
+  safeCopyToClipboard,
 } from "../../lib/inviteUtils";
 
 export default function AdminEmployees({ setMobileOpen }) {
@@ -191,7 +192,7 @@ export default function AdminEmployees({ setMobileOpen }) {
           role: inv.role,
           teamName: assignedTeam?.name,
         });
-        await navigator.clipboard.writeText(link);
+        await safeCopyToClipboard(link);
         setCopiedInviteId(inv.id);
         setActionNotice({
           type: "success",
@@ -231,7 +232,7 @@ export default function AdminEmployees({ setMobileOpen }) {
           role: inv.role,
           teamName: assignedTeam?.name,
         });
-        await navigator.clipboard.writeText(link);
+        await safeCopyToClipboard(link);
         // 1. Attempt automatic backend dispatch via Resend
         const emailRes = await dispatchInviteEmailViaBackend({
           email: trimmed,
@@ -242,9 +243,10 @@ export default function AdminEmployees({ setMobileOpen }) {
         });
 
         if (emailRes?.status === "sent") {
+          const provider = emailRes?.provider === "brevo" ? "Brevo" : "Resend";
           setActionNotice({
             type: "success",
-            text: `Invitation resent directly to ${trimmed} via Resend! Link also copied to clipboard.`,
+            text: `Invitation resent directly to ${trimmed} via ${provider}! Link also copied to clipboard.`,
           });
         } else {
           // Fallback to mail app
@@ -390,14 +392,14 @@ export default function AdminEmployees({ setMobileOpen }) {
       role: inviteRole,
       orgName: activeOrganization?.name,
     });
-    await navigator.clipboard.writeText(`Subject: ${subject}\n\n${body}`);
+    await safeCopyToClipboard(`Subject: ${subject}\n\n${body}`);
     setCopiedEmailText(true);
     setTimeout(() => setCopiedEmailText(false), 2500);
   };
 
   const handleCopyLinkOnly = async () => {
     if (!generatedInviteLink) return;
-    await navigator.clipboard.writeText(generatedInviteLink);
+    await safeCopyToClipboard(generatedInviteLink);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2500);
   };

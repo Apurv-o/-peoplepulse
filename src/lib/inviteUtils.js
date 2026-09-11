@@ -47,7 +47,6 @@ export async function dispatchInviteEmailViaBackend({ email, link, role, orgName
       body: { email, link, role, orgName, teamName },
       headers: { Authorization: `Bearer ${token}` },
     });
-
     if (error) {
       console.warn("[dispatchInviteEmailViaBackend error]:", error.message);
       return { status: "error", message: error.message };
@@ -58,3 +57,35 @@ export async function dispatchInviteEmailViaBackend({ email, link, role, orgName
     return { status: "error", message: err.message };
   }
 }
+
+export async function safeCopyToClipboard(text) {
+  if (typeof window === "undefined" || !text) return false;
+  try {
+    if (navigator?.clipboard?.writeText && document.hasFocus && document.hasFocus()) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (err) {
+    console.warn("[safeCopyToClipboard] navigator.clipboard failed, attempting fallback:", err.message);
+  }
+
+  // Fallback: programmatic hidden textarea execCommand
+  try {
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    textArea.style.position = "fixed";
+    textArea.style.left = "-9999px";
+    textArea.style.top = "-9999px";
+    textArea.setAttribute("readonly", "");
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    const successful = document.execCommand("copy");
+    document.body.removeChild(textArea);
+    return successful;
+  } catch (fallbackErr) {
+    console.warn("[safeCopyToClipboard] fallback execCommand failed:", fallbackErr.message);
+    return false;
+  }
+}
+
