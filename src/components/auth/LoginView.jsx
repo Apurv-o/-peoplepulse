@@ -768,10 +768,10 @@ export default function LoginView({ onSignIn, onReturnHome, initialMode = "login
                 <div className="flex items-center justify-between mb-2.5">
                   <span className="text-[11px] font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
                     <Sparkles size={12} className="text-[#4E6ABF]" />
-                    Hackathon Access
+                    Hackathon Access Login
                   </span>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-[#4E6ABF] border border-blue-200/60">
-                    1-Click Auto Login
+                    click here to automatically login
                   </span>
                 </div>
 
