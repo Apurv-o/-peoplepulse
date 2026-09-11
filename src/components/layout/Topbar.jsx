@@ -115,9 +115,9 @@ export default function Topbar({ title, subtitle, setMobileOpen, right }) {
             payload.eventType === "INSERT" &&
             typeof window !== "undefined" &&
             "Notification" in window &&
-            Notification.permission === "granted"
+            window.Notification.permission === "granted"
           ) {
-            new Notification(payload.new?.title || "Daily Pulse Check-in Ready", {
+            new window.Notification(payload.new?.title || "Daily Pulse Check-in Ready", {
               body: payload.new?.message || "Today's pulse check-in is now open.",
               icon: "/favicon.ico",
             });
@@ -135,9 +135,9 @@ export default function Topbar({ title, subtitle, setMobileOpen, right }) {
       if (
         typeof window !== "undefined" &&
         "Notification" in window &&
-        Notification.permission === "granted"
+        window.Notification.permission === "granted"
       ) {
-        new Notification("Daily Pulse Check-in Ready", {
+        new window.Notification("Daily Pulse Check-in Ready", {
           body: "A new day has started! Today's 60-second confidential pulse check-in is now open.",
           icon: "/favicon.ico",
         });
@@ -175,9 +175,9 @@ export default function Topbar({ title, subtitle, setMobileOpen, right }) {
   const handleRequestPushPermission = async () => {
     if (typeof window !== "undefined" && "Notification" in window) {
       try {
-        const perm = await Notification.requestPermission();
+        const perm = await window.Notification.requestPermission();
         if (perm === "granted") {
-          new Notification("Notifications Enabled", {
+          new window.Notification("Notifications Enabled", {
             body: "You'll receive a daily reminder when the new pulse cycle opens at 12:00 AM.",
             icon: "/favicon.ico",
           });
@@ -265,7 +265,7 @@ export default function Topbar({ title, subtitle, setMobileOpen, right }) {
               </div>
 
               {/* Browser Push Permission CTA */}
-              {typeof window !== "undefined" && "Notification" in window && Notification.permission === "default" && (
+              {typeof window !== "undefined" && "Notification" in window && window.Notification.permission === "default" && (
                 <div className="my-2.5 p-2.5 rounded-xl bg-blue-50 border border-blue-200/60 flex items-center justify-between gap-2">
                   <span className="text-[11px] text-blue-800 font-medium">Enable daily 12:00 AM push alerts</span>
                   <button

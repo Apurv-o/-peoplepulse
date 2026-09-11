@@ -8,6 +8,7 @@ import { calculateEngagementScore } from "../../lib/engagementScoring";
 import { getCurrentWeekMonday, formatWeekLabel, getTodayDate, getCurrentWeekSaturday, getSaturdayCycleRange } from "../../lib/dateUtils";
 
 import { T, Card, ToggleSwitch, RiskBadge, Avatar, Delta, Sparkline, AIInsightCard, KPICard, Dropdown, RatingSelector, ToggleRow } from "../ui";
+import { CHECKIN_DIMENSIONS } from "../../lib/constants";
 
 import {
   Home, MessageSquare, TrendingUp, Users, UserPlus, Layers, ListChecks, UploadCloud,
@@ -106,8 +107,9 @@ export default function EmployeeCheckin({ setMobileOpen, onSubmitted }) {
         }
 
         const todayDate = getTodayDate();
-        const checkinId = crypto.randomUUID();
-        const processingToken = anon ? crypto.randomUUID() : null;
+        const safeUUID = () => (typeof window !== "undefined" && window.crypto && typeof window.crypto.randomUUID === "function" ? window.crypto.randomUUID() : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => { const r = (Math.random() * 16) | 0; const v = c === "x" ? r : (r & 0x3) | 0x8; return v.toString(16); }));
+        const checkinId = safeUUID();
+        const processingToken = anon ? safeUUID() : null;
 
         // Resolve active organization ID from team
         let targetOrgId = activeOrganizationId;

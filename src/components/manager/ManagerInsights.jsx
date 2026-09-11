@@ -359,16 +359,4 @@ export default function ManagerInsights({ setMobileOpen }) {
 }
 
 
-/* ============================================================
-   EMPLOYEE CHECK-IN & WELLBEING
-   ============================================================ */
-const CHECKIN_DIMENSIONS = [
-  { key: "workload", label: "Workload manageable" },
-  { key: "support", label: "Manager support" },
-  { key: "collab", label: "Team collaboration" },
-  { key: "motivation", label: "Motivation & energy" },
-  { key: "stress", label: "Stress level (1: High, 5: Low)" },
-];
-
-const FACES = ["😣", "🙁", "😐", "🙂", "😄"];
 

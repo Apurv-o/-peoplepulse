@@ -8,6 +8,7 @@ import { calculateEngagementScore } from "../../lib/engagementScoring";
 import { getCurrentWeekMonday, formatWeekLabel, getTodayDate, getCurrentWeekSaturday, getSaturdayCycleRange } from "../../lib/dateUtils";
 
 import { T, Card, ToggleSwitch, RiskBadge, Avatar, Delta, Sparkline, AIInsightCard, KPICard, Dropdown, RatingSelector, ToggleRow } from "../ui";
+import { CHECKIN_DIMENSIONS } from "../../lib/constants";
 
 import {
   Home, MessageSquare, TrendingUp, Users, UserPlus, Layers, ListChecks, UploadCloud,

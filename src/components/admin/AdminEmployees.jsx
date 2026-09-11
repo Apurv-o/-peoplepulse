@@ -19,6 +19,13 @@ import {
 
 import Topbar from "../layout/Topbar";
 import EmployeeDailyHistoryModal from "../modals/EmployeeDailyHistoryModal";
+import {
+  buildInviteLink,
+  buildInviteEmailDetails,
+  triggerEmailApp,
+  triggerGmailWeb,
+  dispatchInviteEmailViaBackend,
+} from "../../lib/inviteUtils";
 
 export default function AdminEmployees({ setMobileOpen }) {
   const {
@@ -212,6 +219,7 @@ export default function AdminEmployees({ setMobileOpen }) {
   const handleEmailPendingInvite = async (inv) => {
     setResendingInviteId(inv.id);
     setActionNotice(null);
+    const trimmed = (inv?.email || "").trim().toLowerCase();
     try {
       const res = await resendInvitation(inv.id);
       if (res?.token) {

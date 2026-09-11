@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 
 import Topbar from "../layout/Topbar";
+import EmployeeDailyHistoryModal from "../modals/EmployeeDailyHistoryModal";
 
 export default function ManagerTeam({ setMobileOpen }) {
   const { user } = useAuth();
