@@ -538,9 +538,16 @@ class ErrorBoundary extends React.Component {
             ⚠️
           </div>
           <h1 className="text-xl font-bold text-[#1F2A28] mb-2">Something unexpected occurred</h1>
-          <p className="text-xs text-[#7B8494] max-w-md mb-6 leading-relaxed">
+          <p className="text-xs text-[#7B8494] max-w-md mb-2 leading-relaxed">
             The application encountered a temporary issue. Please reload or return to the homepage.
           </p>
+          {this.state.error && (
+            <div className="p-3 mb-5 max-w-lg w-full rounded-xl bg-red-50/80 border border-red-200 text-left">
+              <p className="text-[11px] font-mono text-red-700 font-semibold break-words">
+                {String(this.state.error?.message || this.state.error)}
+              </p>
+            </div>
+          )}
           <div className="flex items-center gap-3">
             <button
               onClick={() => window.location.reload()}
