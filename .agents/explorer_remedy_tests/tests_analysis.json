@@ -1,0 +1,771 @@
+{
+  "demo_video_player/tests/tier1_feature_coverage.test.mjs": {
+    "total": 120,
+    "onlyTrueCount": 20,
+    "maskedCount": 74,
+    "cleanCount": 26,
+    "onlyTrue": [
+      "T1.F09.4 - Future spoken words receive default/unhighlighted styling",
+      "T1.F15.1 - Fallback Action card appears following HTTP 503 failure (~205s)",
+      "T1.F15.4 - Resilience telemetry shows 0% message loss, 100% self-healing autonomy",
+      "T1.F16.5 - Defense Answer 4 details dual-key failover and offline deterministic planner",
+      "T1.F17.2 - Playback state is decoupled from sandbox exploration state",
+      "T1.F17.3 - DOM elements in drawer become clickable/interactive during pause",
+      "T1.F17.5 - Visual indicator shows Interactive Live-Pause Mode is active",
+      "T1.F18.1 - Expandable/collapsible details elements exist on Action cards",
+      "T1.F18.4 - Visual callout banner proves organization_id was server-injected from session",
+      "T1.F19.1 - Drawer provides tabs: ReAct Copilot, Audit Trail, and Tools Registry",
+      "T1.F19.5 - Active tab button receives highlighted active styling",
+      "T1.F20.2 - Columns include Timestamp, Goal, Tool Invoked, Status, Sanitized Input, Outcome",
+      "T1.F20.4 - Human-in-the-Loop modal mockup demonstrated for sensitive actions (broadcast_alert)",
+      "T1.F20.5 - HITL modal contains Approve Action and Deny Action buttons",
+      "T1.F21.4 - Resuming re-anchors event card stream scroll position to current step",
+      "T1.F21.5 - Resumption feedback/toast notice informs viewer of automated continuation",
+      "T1.F24.2 - Harness validates DOM readyState === complete and index.html loading",
+      "T1.F24.3 - Harness checks for zero runtime console errors and zero uncaught exceptions",
+      "T1.F24.4 - Harness validates timeline progression across all 6 stage checkpoints",
+      "T1.F24.5 - Harness returns exit code 0 on complete pass, non-zero on failure"
+    ],
+    "masked": [
+      {
+        "title": "T1.F01.3 - Monotonic advancement of currentTime during playback",
+        "realAssertions": 1,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine) {\n        const engine = new Engine({ mode: 'synthetic' });\n        engine.seek(10.0);\n        const t1 = engine.getCurrentTime();\n        if (typeof engine.tick === 'function') {\n          engine.tick(16.67);\n        } else if (typeof engine._updateSyntheticClock === 'function') {\n          engine._updateSyntheticClock(100);\n        }\n        const t2 = engine.getCurrentTime();\n        assert(t2 >= t1, 'Time must advance monotonically');\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T1.F01.5 - Stage lookup correctly maps timestamps to the 6 stages",
+        "realAssertions": 3,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const dataMod = await loadPlayerModule('js/presentationData.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      const data = dataMod?.PEOPLEPULSE_PRESENTATION_DATA || env.window.PEOPLEPULSE_PRESENTATION_DATA;\n      if (Engine) {\n        const engine = new Engine();\n        if (typeof engine.getStage === 'function') {\n          const s1 = engine.getStage(20.0);\n          const s2 = engine.getStage(60.0);\n          const s5 = engine.getStage(180.0);\n          assertIncludes((s1.name || s1.key || s1.title).toLowerCase(), 'goal', '20s is Goal');\n          assertIncludes((s2.name || s2.key || s2.title).toLowerCase(), 'decision', '60s is Decision');\n          assertIncludes((s5.name || s5.key || s5.title).toLowerCase(), 'adapt', '180s is Adaptation');\n        }\n      }\n      assert(true);"
+      },
+      {
+        "title": "T1.F02.1 - play() switches state from paused to playing (isPaused === false)",
+        "realAssertions": 2,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine) {\n        const engine = new Engine();\n        engine.pause();\n        assert(engine.isPaused || engine.getState()?.includes('PAUSED'), 'Initial state can be paused');\n        engine.play();\n        assert(!engine.isPaused || engine.getState() === 'PLAYING', 'play() must set playing state');\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T1.F02.2 - pause() halts time progression (isPaused === true)",
+        "realAssertions": 1,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine) {\n        const engine = new Engine();\n        engine.play();\n        engine.pause();\n        assert(engine.isPaused || engine.getState()?.includes('PAUSED'), 'pause() must set paused state');\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T1.F02.4 - Resuming after pause starts from the exact paused timestamp",
+        "realAssertions": 1,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine) {\n        const engine = new Engine();\n        engine.seek(175.4);\n        engine.pause();\n        const pausedTime = engine.getCurrentTime();\n        engine.play();\n        const resumedTime = engine.getCurrentTime();\n        assertApprox(resumedTime, pausedTime, 0.05, 'Resume must not jump forward or backward');\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T1.F02.5 - restart() resets currentTime to 0.0s and restores initial stage",
+        "realAssertions": 2,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine) {\n        const engine = new Engine();\n        engine.seek(220.0);\n        if (typeof engine.restart === 'function') {\n          engine.restart();\n          assertEqual(engine.getCurrentTime(), 0.0, 'restart() must reset to 0.0s');\n        } else {\n          engine.seek(0.0);\n          assertEqual(engine.getCurrentTime(), 0.0);\n        }\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T1.F03.1 - Supports standard 1.0x speed multiplier",
+        "realAssertions": 1,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine) {\n        const engine = new Engine();\n        engine.setSpeed(1.0);\n        assertEqual(engine.getSpeed?.() || engine.speed, 1.0, 'Default speed is 1.0x');\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T1.F03.2 - Supports 1.25x speed multiplier and scales progression rate",
+        "realAssertions": 1,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine) {\n        const engine = new Engine();\n        engine.setSpeed(1.25);\n        assertEqual(engine.getSpeed?.() || engine.speed, 1.25, 'Speed set to 1.25x');\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T1.F03.3 - Supports 1.5x speed multiplier and scales progression rate",
+        "realAssertions": 1,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine) {\n        const engine = new Engine();\n        engine.setSpeed(1.5);\n        assertEqual(engine.getSpeed?.() || engine.speed, 1.5, 'Speed set to 1.5x');\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T1.F03.4 - Setting speed updates underlying audio playbackRate",
+        "realAssertions": 1,
+        "body": "const audioMod = await loadPlayerModule('js/audioManager.js', env);\n      const AudioMgr = audioMod?.AudioManager || env.window.AudioManager;\n      if (AudioMgr) {\n        const mgr = new AudioMgr();\n        if (typeof mgr.setRate === 'function') {\n          mgr.setRate(1.25);\n          assertEqual(mgr.getRate?.() || mgr.audioElement?.playbackRate || 1.25, 1.25);\n        }\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T1.F03.5 - Pitch preservation (preservesPitch = true) is maintained when speed changes",
+        "realAssertions": 1,
+        "body": "const audioMod = await loadPlayerModule('js/audioManager.js', env);\n      const AudioMgr = audioMod?.AudioManager || env.window.AudioManager;\n      if (AudioMgr) {\n        const mgr = new AudioMgr();\n        if (typeof mgr.setRate === 'function') {\n          mgr.setRate(1.5);\n          assert(mgr.audioElement?.preservesPitch !== false, 'Pitch preservation should remain true');\n        }\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T1.F04.2 - Jump to Stage 1 seeks to 0s",
+        "realAssertions": 1,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine) {\n        const engine = new Engine();\n        engine.seek(100);\n        if (typeof engine.jumpToStage === 'function') {\n          engine.jumpToStage(0);\n          assertApprox(engine.getCurrentTime(), 0.0, 0.1);\n        }\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T1.F04.3 - Jump to Stage 2 seeks to 45s",
+        "realAssertions": 1,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine) {\n        const engine = new Engine();\n        if (typeof engine.jumpToStage === 'function') {\n          engine.jumpToStage(1);\n          assertApprox(engine.getCurrentTime(), 45.0, 0.1);\n        }\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T1.F04.4 - Jump to Stage 5 (Adaptation) seeks to 160s",
+        "realAssertions": 1,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine) {\n        const engine = new Engine();\n        if (typeof engine.jumpToStage === 'function') {\n          engine.jumpToStage(4);\n          assertApprox(engine.getCurrentTime(), 160.0, 0.1);\n        }\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T1.F04.5 - Jump to Stage 6 (Outcome) seeks to 225s",
+        "realAssertions": 1,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine) {\n        const engine = new Engine();\n        if (typeof engine.jumpToStage === 'function') {\n          engine.jumpToStage(5);\n          assertApprox(engine.getCurrentTime(), 225.0, 0.1);\n        }\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T1.F05.1 - Stage auto-advances from Goal to Decision when crossing 45s",
+        "realAssertions": 1,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine) {\n        const engine = new Engine();\n        engine.seek(44.9);\n        const stageBefore = engine.getCurrentStage?.() || engine.getStage?.(44.9);\n        engine.seek(45.1);\n        const stageAfter = engine.getCurrentStage?.() || engine.getStage?.(45.1);\n        assertNotEqual(stageBefore?.id, stageAfter?.id, 'Stage must advance across 45s');\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T1.F05.2 - Stage auto-advances from Evaluation to Adaptation when crossing 160s",
+        "realAssertions": 1,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine) {\n        const engine = new Engine();\n        engine.seek(159.9);\n        const stageBefore = engine.getCurrentStage?.() || engine.getStage?.(159.9);\n        engine.seek(160.1);\n        const stageAfter = engine.getCurrentStage?.() || engine.getStage?.(160.1);\n        assertNotEqual(stageBefore?.id, stageAfter?.id, 'Stage must advance across 160s');\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T1.F05.3 - Active stage indicator updates to active/highlighted state",
+        "realAssertions": 0,
+        "body": "const sceneMod = await loadPlayerModule('js/sceneSimulator.js', env);\n      const SceneSim = sceneMod?.SceneSimulator || env.window.SceneSimulator;\n      if (SceneSim) {\n        const container = env.document.createElement('div');\n        const sim = new SceneSim(container);\n        if (typeof sim.update === 'function') {\n          sim.update(60.0, SPEC_CONSTANTS.STAGES[1]);\n        }\n      }\n      assert(true);"
+      },
+      {
+        "title": "T1.F06.1 - Audio asset path configuration points to assets/audio/narration_full.mp3",
+        "realAssertions": 1,
+        "body": "const audioMod = await loadPlayerModule('js/audioManager.js', env);\n      const AudioMgr = audioMod?.AudioManager || env.window.AudioManager;\n      if (AudioMgr) {\n        const mgr = new AudioMgr();\n        const src = mgr.primarySrc || mgr.audio?.src || mgr.audioElement?.src || '';\n        assertIncludes(src, 'narration_full.mp3');\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T1.F06.2 - Pitch script covers all 6 blocks (~680 total spoken words)",
+        "realAssertions": 1,
+        "body": "const dataMod = await loadPlayerModule('js/presentationData.js', env);\n      const data = dataMod?.PEOPLEPULSE_PRESENTATION_DATA || env.window.PEOPLEPULSE_PRESENTATION_DATA;\n      const cues = data?.cues || [];\n      if (cues.length > 0) {\n        const totalWords = cues.reduce((sum, c) => sum + (c.text?.split(/\\s+/).length || 0), 0);\n        assert(totalWords >= 600, `Total spoken words should be >= 600, got ${totalWords}`);\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T1.F06.3 - Audio playback starts when presentation play begins",
+        "realAssertions": 1,
+        "body": "const audioMod = await loadPlayerModule('js/audioManager.js', env);\n      const AudioMgr = audioMod?.AudioManager || env.window.AudioManager;\n      if (AudioMgr) {\n        const mgr = new AudioMgr();\n        await mgr.play();\n        assert(!mgr.audioElement.paused, 'Audio should be playing after play()');\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T1.F06.4 - Audio playback pauses when presentation pauses",
+        "realAssertions": 1,
+        "body": "const audioMod = await loadPlayerModule('js/audioManager.js', env);\n      const AudioMgr = audioMod?.AudioManager || env.window.AudioManager;\n      if (AudioMgr) {\n        const mgr = new AudioMgr();\n        await mgr.play();\n        mgr.pause();\n        assert(mgr.audioElement.paused, 'Audio should be paused after pause()');\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T1.F06.5 - Audio playback seeks synchronously when timeline seeks",
+        "realAssertions": 1,
+        "body": "const audioMod = await loadPlayerModule('js/audioManager.js', env);\n      const AudioMgr = audioMod?.AudioManager || env.window.AudioManager;\n      if (AudioMgr) {\n        const mgr = new AudioMgr();\n        mgr.seek(145.0);\n        assertApprox(mgr.audioElement.currentTime, 145.0, 0.1);\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T1.F07.1 - Volume setter updates audio volume level between 0.0 and 1.0",
+        "realAssertions": 1,
+        "body": "const audioMod = await loadPlayerModule('js/audioManager.js', env);\n      const AudioMgr = audioMod?.AudioManager || env.window.AudioManager;\n      if (AudioMgr) {\n        const mgr = new AudioMgr();\n        mgr.setVolume(0.7);\n        assertApprox(mgr.getVolume(), 0.7, 0.05);\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T1.F07.2 - Mute toggle silences audio (muted = true / volume effectively 0)",
+        "realAssertions": 1,
+        "body": "const audioMod = await loadPlayerModule('js/audioManager.js', env);\n      const AudioMgr = audioMod?.AudioManager || env.window.AudioManager;\n      if (AudioMgr) {\n        const mgr = new AudioMgr();\n        mgr.toggleMute();\n        assert(mgr.isMuted(), 'Mute toggle should set muted true');\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T1.F07.3 - Unmuting restores previous volume level",
+        "realAssertions": 1,
+        "body": "const audioMod = await loadPlayerModule('js/audioManager.js', env);\n      const AudioMgr = audioMod?.AudioManager || env.window.AudioManager;\n      if (AudioMgr) {\n        const mgr = new AudioMgr();\n        mgr.setVolume(0.85);\n        mgr.toggleMute(); // mute\n        mgr.toggleMute(); // unmute\n        assertApprox(mgr.getVolume(), 0.85, 0.05, 'Unmuting should restore 0.85 volume');\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T1.F07.4 - Audio muting does not halt the timeline clock or subtitles",
+        "realAssertions": 1,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine) {\n        const engine = new Engine();\n        engine.play();\n        // Mute should not pause engine\n        assert(!engine.isPaused || engine.getState() === 'PLAYING');\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T1.F07.5 - Playback rate adjustments sync to audio element rate",
+        "realAssertions": 1,
+        "body": "const audioMod = await loadPlayerModule('js/audioManager.js', env);\n      const AudioMgr = audioMod?.AudioManager || env.window.AudioManager;\n      if (AudioMgr) {\n        const mgr = new AudioMgr();\n        mgr.setRate(1.5);\n        assertEqual(mgr.audioElement.playbackRate, 1.5);\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T1.F08.1 - Subtitle overlay container exists with high contrast styling",
+        "realAssertions": 1,
+        "body": "const subMod = await loadPlayerModule('js/subtitleRenderer.js', env);\n      const SubRenderer = subMod?.SubtitleRenderer || env.window.SubtitleRenderer;\n      if (SubRenderer) {\n        const container = env.document.createElement('div');\n        const renderer = new SubRenderer(container);\n        assert(renderer !== null);\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T1.F08.2 - Displays active sentence text matching spoken script for current timestamp",
+        "realAssertions": 1,
+        "body": "const dataMod = await loadPlayerModule('js/presentationData.js', env);\n      const subMod = await loadPlayerModule('js/subtitleRenderer.js', env);\n      const data = dataMod?.PEOPLEPULSE_PRESENTATION_DATA || env.window.PEOPLEPULSE_PRESENTATION_DATA;\n      const SubRenderer = subMod?.SubtitleRenderer || env.window.SubtitleRenderer;\n      if (SubRenderer && data?.cues) {\n        const container = env.document.createElement('div');\n        const renderer = new SubRenderer(container);\n        renderer.loadCues(data.cues);\n        const cue = renderer.getActiveCue(5.0);\n        if (cue) {\n          assertIncludes(cue.text, 'burnout', 'Cue at 5s mentions burnout');\n        }\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T1.F08.3 - Stage indicator tag is rendered alongside subtitle text",
+        "realAssertions": 1,
+        "body": "const dataMod = await loadPlayerModule('js/presentationData.js', env);\n      const data = dataMod?.PEOPLEPULSE_PRESENTATION_DATA || env.window.PEOPLEPULSE_PRESENTATION_DATA;\n      if (data?.cues && data.cues.length > 0) {\n        assert(data.cues[0].stageName || data.cues[0].stageId, 'Cues should include stage tag information');\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T1.F08.4 - Subtitle visibility toggle (hide/show) functions correctly",
+        "realAssertions": 2,
+        "body": "const subMod = await loadPlayerModule('js/subtitleRenderer.js', env);\n      const SubRenderer = subMod?.SubtitleRenderer || env.window.SubtitleRenderer;\n      if (SubRenderer) {\n        const container = env.document.createElement('div');\n        const renderer = new SubRenderer(container);\n        if (typeof renderer.toggleVisibility === 'function') {\n          renderer.toggleVisibility(false);\n          assert(renderer.isVisible === false || container.style.display === 'none');\n          renderer.toggleVisibility(true);\n          assert(renderer.isVisible === true || container.style.display !== 'none');\n        }\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T1.F08.5 - Interactive transcript drawer contains complete pitch script",
+        "realAssertions": 1,
+        "body": "const dataMod = await loadPlayerModule('js/presentationData.js', env);\n      const data = dataMod?.PEOPLEPULSE_PRESENTATION_DATA || env.window.PEOPLEPULSE_PRESENTATION_DATA;\n      if (data?.cues) {\n        assert(data.cues.length >= 20, `Pitch script cues should be >= 20, got ${data.cues.length}`);\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T1.F09.1 - Word tokens contain millisecond start and end timestamps",
+        "realAssertions": 3,
+        "body": "const dataMod = await loadPlayerModule('js/presentationData.js', env);\n      const data = dataMod?.PEOPLEPULSE_PRESENTATION_DATA || env.window.PEOPLEPULSE_PRESENTATION_DATA;\n      if (data?.cues && data.cues[0]?.tokens) {\n        const tok = data.cues[0].tokens[0];\n        assert(typeof tok.start === 'number', 'Token start should be number');\n        assert(typeof tok.end === 'number', 'Token end should be number');\n        assert(tok.end >= tok.start, 'Token end >= start');\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T1.F09.2 - Active spoken word receives .karaoke-active styling",
+        "realAssertions": 1,
+        "body": "const subMod = await loadPlayerModule('js/subtitleRenderer.js', env);\n      const SubRenderer = subMod?.SubtitleRenderer || env.window.SubtitleRenderer;\n      if (SubRenderer) {\n        const container = env.document.createElement('div');\n        const renderer = new SubRenderer(container);\n        renderer.loadCues([\n          {\n            id: 'c1',\n            start: 0,\n            end: 5,\n            text: 'Hello world test',\n            tokens: [\n              { text: 'Hello', start: 0, end: 1 },\n              { text: 'world', start: 1, end: 2 },\n              { text: 'test', start: 2, end: 3 }\n            ]\n          }\n        ]);\n        renderer.update(1.5);\n        const activeWord = container.querySelector('.karaoke-active');\n        if (activeWord) {\n          assertIncludes(activeWord.textContent, 'world');\n        }\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T1.F09.3 - Past spoken words receive muted styling",
+        "realAssertions": 0,
+        "body": "const subMod = await loadPlayerModule('js/subtitleRenderer.js', env);\n      const SubRenderer = subMod?.SubtitleRenderer || env.window.SubtitleRenderer;\n      if (SubRenderer) {\n        const container = env.document.createElement('div');\n        const renderer = new SubRenderer(container);\n        renderer.loadCues([\n          {\n            id: 'c1',\n            start: 0,\n            end: 5,\n            text: 'Hello world',\n            tokens: [\n              { text: 'Hello', start: 0, end: 1 },\n              { text: 'world', start: 1, end: 2 }\n            ]\n          }\n        ]);\n        renderer.update(1.5);\n      }\n      assert(true);"
+      },
+      {
+        "title": "T1.F09.5 - Key technical terms have highlight accents",
+        "realAssertions": 1,
+        "body": "const dataMod = await loadPlayerModule('js/presentationData.js', env);\n      const data = dataMod?.PEOPLEPULSE_PRESENTATION_DATA || env.window.PEOPLEPULSE_PRESENTATION_DATA;\n      if (data?.cues) {\n        const hasHighlights = data.cues.some((c) => c.tokens?.some((t) => t.highlight) || c.key_terms?.length > 0);\n        assert(hasHighlights || true, 'Key technical terms accented');\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T1.F10.1 - Audio master clock mode is active when audio element is playing",
+        "realAssertions": 1,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine) {\n        const engine = new Engine({ mode: 'audio' });\n        assertEqual(engine.mode || 'audio', 'audio');\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T1.F10.2 - Synthetic clock fallback is active when audio is unavailable or muted",
+        "realAssertions": 1,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine) {\n        const engine = new Engine({ mode: 'synthetic' });\n        assertEqual(engine.mode || 'synthetic', 'synthetic');\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T1.F10.3 - Micro-drift (|drift| <= 0.05s) causes no visual jitter",
+        "realAssertions": 1,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine) {\n        const engine = new Engine();\n        if (typeof engine.applyDriftCompensation === 'function') {\n          const adj = engine.applyDriftCompensation(0.02);\n          assertEqual(adj, 0, 'Micro-drift <= 0.05s produces 0 correction');\n        }\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T1.F10.4 - Moderate drift (0.05s < |drift| <= 0.3s) applies smooth exponential nudge",
+        "realAssertions": 1,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine) {\n        const engine = new Engine();\n        if (typeof engine.applyDriftCompensation === 'function') {\n          const adj = engine.applyDriftCompensation(0.15);\n          assert(adj > 0 && adj < 0.15, 'Moderate drift applies partial soft nudge');\n        }\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T1.F10.5 - Major drift (|drift| > 0.3s) triggers hard synchronization to audio master",
+        "realAssertions": 1,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine) {\n        const engine = new Engine();\n        if (typeof engine.applyDriftCompensation === 'function') {\n          const adj = engine.applyDriftCompensation(0.8);\n          assertApprox(adj, 0.8, 0.05, 'Major drift applies hard sync');\n        }\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T1.F11.1 - Admin Dashboard renders during Stage 1 (0s - 45s)",
+        "realAssertions": 1,
+        "body": "await loadPlayerModule('js/presentationData.js', env);\n      const sceneMod = await loadPlayerModule('js/sceneSimulator.js', env);\n      const SceneSim = sceneMod?.SceneSimulator || env.window.SceneSimulator;\n      if (SceneSim) {\n        const sim = new SceneSim();\n        sim.update(10.0, SPEC_CONSTANTS.STAGES[0]);\n        const kpi = env.document.getElementById('dashboard-kpi-grid');\n        assert(kpi !== null && (kpi.innerHTML.length > 0 || kpi.children.length > 0));\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T1.F12.2 - Drawer slides open at Stage 2 (t = 45s)",
+        "realAssertions": 1,
+        "body": "const sceneMod = await loadPlayerModule('js/sceneSimulator.js', env);\n      const SceneSim = sceneMod?.SceneSimulator || env.window.SceneSimulator;\n      if (SceneSim) {\n        const container = env.document.createElement('div');\n        const sim = new SceneSim(container);\n        sim.update(50.0, SPEC_CONSTANTS.STAGES[1]);\n        if (typeof sim.isDrawerOpen === 'function') {\n          assert(sim.isDrawerOpen(), 'Drawer should be open in Stage 2');\n        }\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T1.F12.3 - Drawer header renders PulseAgent, ReAct AI Agent, and Gemini Live badges",
+        "realAssertions": 0,
+        "body": "const dataMod = await loadPlayerModule('js/presentationData.js', env);\n      assert(true);"
+      },
+      {
+        "title": "T1.F13.1 - Stage 1 Goal card renders at ~95s with goal description",
+        "realAssertions": 1,
+        "body": "const dataMod = await loadPlayerModule('js/presentationData.js', env);\n      const data = dataMod?.PEOPLEPULSE_PRESENTATION_DATA || env.window.PEOPLEPULSE_PRESENTATION_DATA;\n      const cards = data?.cards || data?.odaeaCards || [];\n      const goalCard = cards.find((c) => c.stage === 1 || c.type === 'goal');\n      if (goalCard) {\n        assertIncludes((goalCard.title || goalCard.content || goalCard.summary).toLowerCase(), 'goal');\n      }\n      assert(true);"
+      },
+      {
+        "title": "T1.F13.2 - Stage 2 Decision card renders at ~105s with tool get_organization_metrics",
+        "realAssertions": 1,
+        "body": "const dataMod = await loadPlayerModule('js/presentationData.js', env);\n      const data = dataMod?.PEOPLEPULSE_PRESENTATION_DATA || env.window.PEOPLEPULSE_PRESENTATION_DATA;\n      const cards = data?.cards || data?.odaeaCards || [];\n      const decCard = cards.find((c) => c.stage === 2 || c.type === 'decision');\n      if (decCard) {\n        assertIncludes(decCard.tool || decCard.reasoning || '', 'get_organization_metrics');\n      }\n      assert(true);"
+      },
+      {
+        "title": "T1.F13.3 - Stage 3 Action card renders at ~118s with executed status",
+        "realAssertions": 1,
+        "body": "const dataMod = await loadPlayerModule('js/presentationData.js', env);\n      const data = dataMod?.PEOPLEPULSE_PRESENTATION_DATA || env.window.PEOPLEPULSE_PRESENTATION_DATA;\n      const cards = data?.cards || data?.odaeaCards || [];\n      const actCard = cards.find((c) => c.stage === 3 || c.type === 'action');\n      if (actCard) {\n        assert(actCard.status !== undefined || true);\n      }\n      assert(true);"
+      },
+      {
+        "title": "T1.F13.4 - Observation card renders at ~135s with 68% org and 42% Support metrics",
+        "realAssertions": 1,
+        "body": "const dataMod = await loadPlayerModule('js/presentationData.js', env);\n      const data = dataMod?.PEOPLEPULSE_PRESENTATION_DATA || env.window.PEOPLEPULSE_PRESENTATION_DATA;\n      const cards = data?.cards || data?.odaeaCards || [];\n      const obsCard = cards.find((c) => c.type === 'observation');\n      if (obsCard) {\n        assertIncludes(JSON.stringify(obsCard), '42');\n      }\n      assert(true);"
+      },
+      {
+        "title": "T1.F14.1 - Webhook attempt card triggers in Stage 5 (~165s)",
+        "realAssertions": 0,
+        "body": "const dataMod = await loadPlayerModule('js/presentationData.js', env);\n      assert(true);"
+      },
+      {
+        "title": "T1.F14.3 - Orange Adaptation card renders with radiant orange border/gradient",
+        "realAssertions": 0,
+        "body": "const sceneMod = await loadPlayerModule('js/sceneSimulator.js', env);\n      assert(true);"
+      },
+      {
+        "title": "T1.F14.4 - Adaptation card displays Self-Corrected badge",
+        "realAssertions": 1,
+        "body": "const dataMod = await loadPlayerModule('js/presentationData.js', env);\n      const data = dataMod?.PEOPLEPULSE_PRESENTATION_DATA || env.window.PEOPLEPULSE_PRESENTATION_DATA;\n      const cards = data?.cards || data?.odaeaCards || [];\n      const adaptCard = cards.find((c) => c.stage === 5 || c.type === 'adaptation');\n      if (adaptCard) {\n        assertIncludes(JSON.stringify(adaptCard).toLowerCase(), 'self-corrected');\n      }\n      assert(true);"
+      },
+      {
+        "title": "T1.F14.5 - Procedural alert warning chime method exists and can be triggered",
+        "realAssertions": 0,
+        "body": "const audioMod = await loadPlayerModule('js/audioManager.js', env);\n      const AudioMgr = audioMod?.AudioManager || env.window.AudioManager;\n      if (AudioMgr) {\n        const mgr = new AudioMgr();\n        if (typeof mgr.playAlertChime === 'function') {\n          mgr.playAlertChime();\n        }\n      }\n      assert(true);"
+      },
+      {
+        "title": "T1.F16.1 - Technical Defense Sheet provides 5 judge Q&A defense answers",
+        "realAssertions": 1,
+        "body": "const dataMod = await loadPlayerModule('js/presentationData.js', env);\n      const data = dataMod?.PEOPLEPULSE_PRESENTATION_DATA || env.window.PEOPLEPULSE_PRESENTATION_DATA;\n      const defense = data?.defense || [];\n      if (defense.length > 0) {\n        assertEqual(defense.length, 5, '5 defense answers');\n      }\n      assert(true);"
+      },
+      {
+        "title": "T1.F16.2 - Defense Answer 1 details ReAct loop vs scripted if-else",
+        "realAssertions": 1,
+        "body": "const dataMod = await loadPlayerModule('js/presentationData.js', env);\n      const data = dataMod?.PEOPLEPULSE_PRESENTATION_DATA || env.window.PEOPLEPULSE_PRESENTATION_DATA;\n      if (data?.defense?.[0]) {\n        assertIncludes(JSON.stringify(data.defense[0]), 'ReAct');\n      }\n      assert(true);"
+      },
+      {
+        "title": "T1.F16.3 - Defense Answer 2 details multi-tenant isolation and context stripping",
+        "realAssertions": 1,
+        "body": "const dataMod = await loadPlayerModule('js/presentationData.js', env);\n      const data = dataMod?.PEOPLEPULSE_PRESENTATION_DATA || env.window.PEOPLEPULSE_PRESENTATION_DATA;\n      if (data?.defense?.[1]) {\n        assertIncludes(JSON.stringify(data.defense[1]), 'tenant');\n      }\n      assert(true);"
+      },
+      {
+        "title": "T1.F17.1 - Pausing presentation activates sandbox mode (isUserInteracting enabled)",
+        "realAssertions": 1,
+        "body": "const ctrlMod = await loadPlayerModule('js/interactiveController.js', env);\n      const Controller = ctrlMod?.InteractiveController || env.window.InteractiveController;\n      if (Controller) {\n        const ctrl = new Controller({});\n        ctrl.onPause();\n        assert(ctrl.isInteractive || ctrl.isSandboxActive || true);\n      }\n      assert(true);"
+      },
+      {
+        "title": "T1.F17.4 - Timeline clock and audio remain frozen during sandbox exploration",
+        "realAssertions": 1,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine) {\n        const engine = new Engine();\n        engine.seek(150.0);\n        engine.pause();\n        const t1 = engine.getCurrentTime();\n        if (typeof engine.tick === 'function') engine.tick(100);\n        const t2 = engine.getCurrentTime();\n        assertEqual(t1, t2, 'Paused engine time must remain frozen');\n      }\n      assert(true);"
+      },
+      {
+        "title": "T1.F18.2 - Clicking payload toggle expands raw JSON view",
+        "realAssertions": 1,
+        "body": "const ctrlMod = await loadPlayerModule('js/interactiveController.js', env);\n      const Controller = ctrlMod?.InteractiveController || env.window.InteractiveController;\n      if (Controller && typeof Controller.prototype.togglePayload === 'function') {\n        const ctrl = new Controller({});\n        ctrl.togglePayload('card-1');\n        assert(ctrl.expandedPayloads?.has('card-1') || true);\n      }\n      assert(true);"
+      },
+      {
+        "title": "T1.F18.3 - Action 1 payload reveals organization_id and time_window_days: 30",
+        "realAssertions": 1,
+        "body": "const dataMod = await loadPlayerModule('js/presentationData.js', env);\n      const data = dataMod?.PEOPLEPULSE_PRESENTATION_DATA || env.window.PEOPLEPULSE_PRESENTATION_DATA;\n      const cards = data?.cards || data?.odaeaCards || [];\n      const actionCard = cards.find((c) => c.stage === 3 || c.type === 'action');\n      if (actionCard?.payload) {\n        assertIncludes(JSON.stringify(actionCard.payload), 'organization_id');\n      }\n      assert(true);"
+      },
+      {
+        "title": "T1.F18.5 - Clicking payload toggle again collapses JSON view",
+        "realAssertions": 1,
+        "body": "const ctrlMod = await loadPlayerModule('js/interactiveController.js', env);\n      const Controller = ctrlMod?.InteractiveController || env.window.InteractiveController;\n      if (Controller && typeof Controller.prototype.togglePayload === 'function') {\n        const ctrl = new Controller({});\n        ctrl.togglePayload('card-1');\n        ctrl.togglePayload('card-1');\n        assert(!ctrl.expandedPayloads?.has('card-1') || true);\n      }\n      assert(true);"
+      },
+      {
+        "title": "T1.F19.2 - Default tab is ReAct Copilot (react)",
+        "realAssertions": 1,
+        "body": "const ctrlMod = await loadPlayerModule('js/interactiveController.js', env);\n      const Controller = ctrlMod?.InteractiveController || env.window.InteractiveController;\n      if (Controller) {\n        const ctrl = new Controller({});\n        assertEqual(ctrl.activeTab || 'react', 'react');\n      }\n      assert(true);"
+      },
+      {
+        "title": "T1.F19.3 - Switching to Audit Trail tab updates active tab state and view",
+        "realAssertions": 1,
+        "body": "const ctrlMod = await loadPlayerModule('js/interactiveController.js', env);\n      const Controller = ctrlMod?.InteractiveController || env.window.InteractiveController;\n      if (Controller && typeof Controller.prototype.setActiveTab === 'function') {\n        const ctrl = new Controller({});\n        ctrl.setActiveTab('audit');\n        assertEqual(ctrl.activeTab, 'audit');\n      }\n      assert(true);"
+      },
+      {
+        "title": "T1.F19.4 - Switching to Tools Registry tab displays registered tools",
+        "realAssertions": 1,
+        "body": "const ctrlMod = await loadPlayerModule('js/interactiveController.js', env);\n      const Controller = ctrlMod?.InteractiveController || env.window.InteractiveController;\n      if (Controller && typeof Controller.prototype.setActiveTab === 'function') {\n        const ctrl = new Controller({});\n        ctrl.setActiveTab('tools');\n        assertEqual(ctrl.activeTab, 'tools');\n      }\n      assert(true);"
+      },
+      {
+        "title": "T1.F20.1 - Audit Trail table renders agent_activity_logs records",
+        "realAssertions": 1,
+        "body": "const dataMod = await loadPlayerModule('js/presentationData.js', env);\n      const data = dataMod?.PEOPLEPULSE_PRESENTATION_DATA || env.window.PEOPLEPULSE_PRESENTATION_DATA;\n      if (data?.auditLogs) {\n        assert(data.auditLogs.length > 0, 'Audit logs should have entries');\n      }\n      assert(true);"
+      },
+      {
+        "title": "T1.F20.3 - Credential masking redacts sensitive tokens (e.g. api_key: [REDACTED])",
+        "realAssertions": 1,
+        "body": "const dataMod = await loadPlayerModule('js/presentationData.js', env);\n      const data = dataMod?.PEOPLEPULSE_PRESENTATION_DATA || env.window.PEOPLEPULSE_PRESENTATION_DATA;\n      if (data?.auditLogs) {\n        const json = JSON.stringify(data.auditLogs);\n        assertIncludes(json, 'REDACTED');\n      }\n      assert(true);"
+      },
+      {
+        "title": "T1.F21.1 - Resuming playback from pause restores timeline clock at exact paused timestamp",
+        "realAssertions": 1,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine) {\n        const engine = new Engine();\n        engine.seek(180.0);\n        engine.pause();\n        engine.play();\n        assertApprox(engine.getCurrentTime(), 180.0, 0.05);\n      }\n      assert(true);"
+      },
+      {
+        "title": "T1.F21.2 - Audio playback resumes synchronously from paused timestamp",
+        "realAssertions": 1,
+        "body": "const audioMod = await loadPlayerModule('js/audioManager.js', env);\n      const AudioMgr = audioMod?.AudioManager || env.window.AudioManager;\n      if (AudioMgr) {\n        const mgr = new AudioMgr();\n        mgr.seek(180.0);\n        mgr.pause();\n        await mgr.play();\n        assertApprox(mgr.getCurrentTime(), 180.0, 0.1);\n      }\n      assert(true);"
+      },
+      {
+        "title": "T1.F21.3 - Resuming resets sandbox drawer tab back to active timeline stage tab",
+        "realAssertions": 1,
+        "body": "await loadPlayerModule('js/presentationData.js', env);\n      const sceneMod = await loadPlayerModule('js/sceneSimulator.js', env);\n      const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const ctrlMod = await loadPlayerModule('js/interactiveController.js', env);\n      const SceneSim = sceneMod?.SceneSimulator || env.window.SceneSimulator;\n      const TimelineEngine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      const Controller = ctrlMod?.InteractiveController || env.window.InteractiveController;\n      if (Controller && SceneSim && TimelineEngine) {\n        const sim = new SceneSim();\n        const engine = new TimelineEngine();\n        const ctrl = new Controller({ sceneSimulator: sim, timelineEngine: engine });\n        ctrl.setActiveTab?.('audit');\n        ctrl.onResume?.();\n        assertEqual(ctrl.activeTab || 'react', 'react');\n      }\n      assert(true);"
+      },
+      {
+        "title": "T1.F22.1 - index.html exists and contains valid HTML5 structure and UTF-8 charset",
+        "realAssertions": 2,
+        "body": "if (fileExistsInPlayer('index.html')) {\n        const html = readPlayerFile('index.html');\n        assertIncludes(html.toLowerCase(), '<!doctype html>');\n        assertIncludes(html.toLowerCase(), 'utf-8');\n      }\n      assert(true);"
+      },
+      {
+        "title": "T1.F22.3 - Zero external cloud/CDN dependencies in script/link tags",
+        "realAssertions": 3,
+        "body": "if (fileExistsInPlayer('index.html')) {\n        const html = readPlayerFile('index.html');\n        assert(!html.includes('https://cdn.'), 'No external CDN links in index.html');\n        assert(!html.includes('https://unpkg.com'), 'No unpkg links in index.html');\n        assert(!html.includes('https://cdnjs.'), 'No cdnjs links in index.html');\n      }\n      assert(true);"
+      },
+      {
+        "title": "T1.F22.4 - presentationData.js defines embedded PEOPLEPULSE_PRESENTATION_DATA for file:/// support",
+        "realAssertions": 1,
+        "body": "if (fileExistsInPlayer('js/presentationData.js')) {\n        const code = readPlayerFile('js/presentationData.js');\n        assertIncludes(code, 'PEOPLEPULSE_PRESENTATION_DATA');\n      }\n      assert(true);"
+      },
+      {
+        "title": "T1.F22.5 - Local asset references use relative paths",
+        "realAssertions": 1,
+        "body": "if (fileExistsInPlayer('index.html')) {\n        const html = readPlayerFile('index.html');\n        assert(!html.includes('http://'), 'No hardcoded http:// paths in index.html');\n      }\n      assert(true);"
+      },
+      {
+        "title": "T1.F24.1 - Verification script scripts/verify_player.mjs exists",
+        "realAssertions": 1,
+        "body": "if (fileExistsInPlayer('scripts/verify_player.mjs')) {\n        const code = readPlayerFile('scripts/verify_player.mjs');\n        assert(code.length > 0);\n      }\n      assert(true);"
+      }
+    ]
+  },
+  "demo_video_player/tests/tier2_boundary_corner.test.mjs": {
+    "total": 120,
+    "onlyTrueCount": 76,
+    "maskedCount": 34,
+    "cleanCount": 10,
+    "onlyTrue": [
+      "T2.F03.4 - High-precision elapsed time ratio matches speed",
+      "T2.F05.2 - Stage advance event fires exactly once per boundary crossing",
+      "T2.F05.4 - Presentation auto-pause mode halts precisely at stage boundaries if enabled",
+      "T2.F05.5 - Stage title and CSS class update dynamically when scrubbing backward and forward",
+      "T2.F06.2 - Audio stalled / waiting event suspends timeline clock to prevent visual runaway desync",
+      "T2.F06.4 - Audio element ended event at 300s transitions player to completed state",
+      "T2.F08.2 - Rapid scrubbing updates subtitle text immediately to matching cue without lag",
+      "T2.F08.3 - Overflow containment and text wrap for the longest sentence in glassmorphic box",
+      "T2.F08.4 - Clicking any transcript line in drawer seeks timeline directly to that cue start timestamp",
+      "T2.F09.1 - Sub-token boundaries: timestamp mid-word illuminates the token",
+      "T2.F09.2 - Inter-word pauses (gap between tokens) clear active word illumination cleanly",
+      "T2.F09.3 - Fast playback rate (1.5x) illuminates words at accelerated intervals without skipped words",
+      "T2.F09.4 - Backward scrub un-illuminates future words and re-illuminates past/active word",
+      "T2.F09.5 - Cues containing punctuation, em-dashes, and special characters tokenize without HTML breakage",
+      "T2.F10.1 - Dynamic fallback from Audio Master to Synthetic Clock when audio encounters error",
+      "T2.F10.3 - Negative drift (audio lagging visual clock) smoothly retards visual progression",
+      "T2.F10.4 - Paused state produces zero drift compensation",
+      "T2.F10.5 - Restoring audio after synthetic mode smoothly reconciles clocks",
+      "T2.F11.1 - Responsive layout: dashboard remains readable across viewports",
+      "T2.F11.2 - Hovering over team metrics renders tooltips with team breakdown",
+      "T2.F11.3 - Background visibility: dashboard remains visible beneath drawer when drawer is open",
+      "T2.F11.4 - Transition from Landing hero to Dashboard at t = 0s",
+      "T2.F11.5 - Missing or null metric properties fall back gracefully to 0 without throwing errors",
+      "T2.F12.1 - Seeking backward before 45s triggers drawer close animation",
+      "T2.F12.2 - Manual toggle button can open and close drawer during paused exploration",
+      "T2.F12.4 - Backdrop overlay responds to drawer open/close state",
+      "T2.F12.5 - Rapid toggling does not leave drawer in inconsistent or half-open state",
+      "T2.F13.2 - Seeking past all cards renders all preceding cards in trace",
+      "T2.F13.3 - Seeking to beginning (0s) clears subsequent cards from trace",
+      "T2.F13.4 - Auto-scroll behavior keeps the latest card in visible view",
+      "T2.F13.5 - Card badge text and icons strictly match stage definitions",
+      "T2.F14.2 - Adaptation required flag is set to true in failure event payload",
+      "T2.F14.3 - Seeking directly into Stage 5 (e.g. 180s) renders the orange adaptation card immediately",
+      "T2.F14.4 - Orange card stays visible for at least 5 seconds without premature dismissal",
+      "T2.F14.5 - Warning chime does not play repeatedly if scrubbing back and forth within Adaptation stage",
+      "T2.F15.1 - Fallback card never appears before failure adaptation has occurred",
+      "T2.F15.2 - Seeking backward before 205s removes fallback card from visible trace",
+      "T2.F15.3 - Fallback execution payload contains alert title and priority level",
+      "T2.F15.4 - Autonomous reroute verified with zero human intervention required",
+      "T2.F15.5 - Stage transitions past 225s preserve emergency reroute card in history",
+      "T2.F16.3 - Rubric Scoring Maximizers section highlights 4 key rubric actions",
+      "T2.F16.4 - Defense sheet overlay can be opened and closed without affecting playback clock",
+      "T2.F16.5 - Replay button in finale scorecard resets presentation to 0:00",
+      "T2.F17.1 - Sandboxed clicks on tabs and cards do not alter currentTime or timeline state",
+      "T2.F17.2 - Spacebar while interacting does not cause unintended jump or scrub",
+      "T2.F17.3 - Multiple consecutive clicks on different cards/tabs maintain sandbox stability",
+      "T2.F17.4 - Pausing at boundary t = 0s activates sandbox with initial scene state",
+      "T2.F17.5 - Pausing at boundary t = 300s activates sandbox with final scene state",
+      "T2.F18.1 - Formatted JSON payload is syntax-valid JSON and readable",
+      "T2.F18.2 - Failure card payload reveals HTTP 503 error details and URL endpoint",
+      "T2.F18.3 - Multiple payloads can be expanded simultaneously in sandbox mode",
+      "T2.F18.4 - Expanded payload state persists throughout pause session",
+      "T2.F18.5 - Schema inspection shows tool parameter definitions (organization_id, time_window_days)",
+      "T2.F19.1 - Tab switching does not modify playback clock or audio state",
+      "T2.F19.2 - Switching back to ReAct Copilot tab restores active event card stream",
+      "T2.F19.3 - Tab click while playing automatically pauses playback or enters sandbox",
+      "T2.F19.5 - Tools tab lists schema-validated tools",
+      "T2.F20.1 - Clicking Deny Action on HITL modal emits error event and logs rejection to audit trail",
+      "T2.F20.2 - Clicking Approve Action simulates authorized execution",
+      "T2.F20.4 - Audit table is scrollable with fixed header for long logs",
+      "T2.F20.5 - Empty audit log state renders clear fallback message without table error",
+      "T2.F21.1 - Resuming after user navigated to Audit tab restores ReAct Copilot view smoothly",
+      "T2.F21.2 - Resuming with expanded JSON payload collapses or preserves safely without layout glitch",
+      "T2.F21.3 - Resuming during audio seek wait waits for audio buffer ready before ticking",
+      "T2.F21.4 - Rapid pause -> inspect -> resume -> pause maintains exact timestamp continuity",
+      "T2.F21.5 - Resume at boundary of stage transition cleanly triggers stage advance",
+      "T2.F22.1 - Offline fallback: functions completely without internet connectivity",
+      "T2.F22.2 - Missing audio file gracefully falls back to synthetic clock mode without crash",
+      "T2.F22.4 - Embedded font fallbacks render cleanly if web fonts unavailable",
+      "T2.F22.5 - Asset directory structure verified (assets/audio/, assets/subtitles/)",
+      "T2.F23.1 - Edge-TTS script handles network error gracefully with clear CLI diagnostic",
+      "T2.F24.1 - Harness detects and reports missing audio assets as warning/fallback",
+      "T2.F24.2 - Harness validates interactive pause and resumption via CDP/DOM simulation",
+      "T2.F24.3 - Harness validates subtitle text alignment with pitch script at multiple timestamps",
+      "T2.F24.4 - Harness handles browser connection timeout gracefully",
+      "T2.F24.5 - Structured JSON / TAP test output emission"
+    ],
+    "masked": [
+      {
+        "title": "T2.F01.1 - Negative seek clamp: Seeking to negative time clamps cleanly to 0.0s",
+        "realAssertions": 1,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine) {\n        const engine = new Engine();\n        engine.seek(-15.5);\n        assertEqual(engine.getCurrentTime(), 0.0, 'Negative seek must clamp to 0.0s');\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T2.F01.2 - Overflow seek clamp: Seeking beyond 300.0s clamps cleanly to 300.0s",
+        "realAssertions": 1,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine) {\n        const engine = new Engine();\n        engine.seek(342.8);\n        assertApprox(engine.getCurrentTime(), 300.0, 0.01, 'Overflow seek must clamp to 300.0s');\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T2.F01.3 - Boundary exact point resolution: Seeking to 0.0s, 45.0s, 90.0s, 134.0s, 160.0s, 225.0s, 300.0s",
+        "realAssertions": 1,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine) {\n        const engine = new Engine();\n        const checkpoints = [0.0, 45.0, 90.0, 134.0, 160.0, 225.0, 300.0];\n        for (const cp of checkpoints) {\n          engine.seek(cp);\n          assertApprox(engine.getCurrentTime(), cp, 0.01, `Exact seek to ${cp}s`);\n        }\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T2.F01.4 - Sub-millisecond precision: 44.999s belongs to Stage 1, 45.000s belongs to Stage 2",
+        "realAssertions": 1,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine && typeof Engine.prototype.getStage === 'function') {\n        const engine = new Engine();\n        const s1 = engine.getStage(44.999);\n        const s2 = engine.getStage(45.0);\n        assertNotEqual(s1?.id, s2?.id, 'Boundary sub-millisecond precision');\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T2.F01.5 - Completion boundary: Reaching 300.0s transitions player state to COMPLETED and halts clock",
+        "realAssertions": 1,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine) {\n        const engine = new Engine({ mode: 'synthetic' });\n        engine.seek(300.0);\n        if (typeof engine.tick === 'function') {\n          engine.tick(500);\n        }\n        assert(engine.isCompleted || engine.getState?.()?.includes('COMPLETE') || engine.getCurrentTime() === 300.0);\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T2.F02.1 - Calling play() when already playing is idempotent",
+        "realAssertions": 1,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine) {\n        const engine = new Engine();\n        engine.play();\n        engine.play(); // duplicate\n        assert(!engine.isPaused);\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T2.F02.2 - Calling pause() when already paused is a no-op",
+        "realAssertions": 1,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine) {\n        const engine = new Engine();\n        engine.pause();\n        engine.pause(); // duplicate\n        assert(engine.isPaused || engine.getState?.()?.includes('PAUSED'));\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T2.F02.3 - Rapid play/pause toggling in succession preserves accurate timestamp and clock integrity",
+        "realAssertions": 1,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine) {\n        const engine = new Engine();\n        engine.seek(50.0);\n        for (let i = 0; i < 10; i++) {\n          if (i % 2 === 0) engine.play();\n          else engine.pause();\n        }\n        assertApprox(engine.getCurrentTime(), 50.0, 0.1);\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T2.F02.4 - Seeking while in playing state preserves playing state at target timestamp",
+        "realAssertions": 2,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine) {\n        const engine = new Engine();\n        engine.play();\n        engine.seek(120.0);\n        assert(!engine.isPaused || engine.getState?.() === 'PLAYING');\n        assertApprox(engine.getCurrentTime(), 120.0, 0.1);\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T2.F02.5 - Seeking while in paused state preserves paused state at target timestamp",
+        "realAssertions": 2,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine) {\n        const engine = new Engine();\n        engine.pause();\n        engine.seek(140.0);\n        assert(engine.isPaused || engine.getState?.()?.includes('PAUSED'));\n        assertApprox(engine.getCurrentTime(), 140.0, 0.1);\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T2.F03.1 - Reject or clamp extreme speed multipliers (< 0.25x or > 3.0x or negative values)",
+        "realAssertions": 2,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine) {\n        const engine = new Engine();\n        engine.setSpeed(-2.0);\n        assert(engine.speed >= 0.25 || engine.getSpeed?.() >= 0.25, 'Negative speed should be clamped');\n        engine.setSpeed(10.0);\n        assert(engine.speed <= 3.0 || engine.getSpeed?.() <= 3.0, 'Excessive speed should be clamped');\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T2.F03.2 - Speed cycling sequence wraps correctly (1.0x -> 1.25x -> 1.5x -> 1.0x)",
+        "realAssertions": 3,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine && typeof Engine.prototype.cycleSpeed === 'function') {\n        const engine = new Engine();\n        engine.setSpeed(1.0);\n        engine.cycleSpeed();\n        assertEqual(engine.speed, 1.25);\n        engine.cycleSpeed();\n        assertEqual(engine.speed, 1.5);\n        engine.cycleSpeed();\n        assertEqual(engine.speed, 1.0);\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T2.F03.3 - Dynamic speed switch during active playback does not create timestamp jumps or drift",
+        "realAssertions": 1,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine) {\n        const engine = new Engine();\n        engine.seek(80.0);\n        engine.play();\n        engine.setSpeed(1.5);\n        assertApprox(engine.getCurrentTime(), 80.0, 0.1);\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T2.F03.5 - Non-numeric / NaN speed input falls back safely to 1.0x default",
+        "realAssertions": 1,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine) {\n        const engine = new Engine();\n        engine.setSpeed(NaN);\n        assert(!isNaN(engine.speed || engine.getSpeed?.()), 'Speed should not be NaN');\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T2.F04.1 - Out-of-bounds stage index jump (< 0 or >= 6) is handled safely without throwing uncaught exceptions",
+        "realAssertions": 0,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine && typeof Engine.prototype.jumpToStage === 'function') {\n        const engine = new Engine();\n        engine.jumpToStage(-1);\n        engine.jumpToStage(99);\n      }\n      assert(true);"
+      },
+      {
+        "title": "T2.F04.2 - Jumping to the currently active stage re-seeks to the exact start of that stage",
+        "realAssertions": 1,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine && typeof Engine.prototype.jumpToStage === 'function') {\n        const engine = new Engine();\n        engine.seek(60.0); // Inside Stage 2 (45-90s)\n        engine.jumpToStage(1); // Re-jump to Stage 2\n        assertApprox(engine.getCurrentTime(), 45.0, 0.1);\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T2.F04.3 - Stage jump from completed state (t = 300s) resets completed state and restores playable state",
+        "realAssertions": 1,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine && typeof Engine.prototype.jumpToStage === 'function') {\n        const engine = new Engine();\n        engine.seek(300.0);\n        engine.jumpToStage(2); // Jump to Stage 3 (90s)\n        assertApprox(engine.getCurrentTime(), 90.0, 0.1);\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T2.F04.4 - Repeated rapid stage jumps across multiple stages do not desync audio/visual states",
+        "realAssertions": 1,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine && typeof Engine.prototype.jumpToStage === 'function') {\n        const engine = new Engine();\n        const stagesToJump = [0, 4, 1, 5, 2, 3];\n        for (const idx of stagesToJump) {\n          engine.jumpToStage(idx);\n        }\n        assertApprox(engine.getCurrentTime(), 134.0, 5.0);\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T2.F05.1 - Backward scrub across stage boundary updates stage breadcrumbs back to earlier stage",
+        "realAssertions": 1,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine) {\n        const engine = new Engine();\n        engine.seek(180.0); // Stage 5\n        engine.seek(30.0); // Stage 1\n        const stage = engine.getCurrentStage?.() || engine.getStage?.(30.0);\n        assertIncludes((stage?.name || stage?.key || '').toLowerCase(), 'goal');\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T2.F06.1 - Audio error fallback activates offline SAPI WAV or synthetic clock mode without unhandled crash",
+        "realAssertions": 0,
+        "body": "const audioMod = await loadPlayerModule('js/audioManager.js', env);\n      const AudioMgr = audioMod?.AudioManager || env.window.AudioManager;\n      if (AudioMgr) {\n        const mgr = new AudioMgr();\n        // Simulate error event\n        if (mgr.audioElement) {\n          mgr.audioElement.dispatchEvent({ type: 'error' });\n        }\n      }\n      assert(true);"
+      },
+      {
+        "title": "T2.F06.3 - Seeking during audio unready/buffering state preserves seek target until audio is ready",
+        "realAssertions": 1,
+        "body": "const audioMod = await loadPlayerModule('js/audioManager.js', env);\n      const AudioMgr = audioMod?.AudioManager || env.window.AudioManager;\n      if (AudioMgr) {\n        const mgr = new AudioMgr();\n        mgr.seek(210.0);\n        assertApprox(mgr.audioElement.currentTime, 210.0, 0.1);\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T2.F06.5 - Rapid seeking does not trigger audio decoding errors or buffer distortion",
+        "realAssertions": 0,
+        "body": "const audioMod = await loadPlayerModule('js/audioManager.js', env);\n      const AudioMgr = audioMod?.AudioManager || env.window.AudioManager;\n      if (AudioMgr) {\n        const mgr = new AudioMgr();\n        for (let i = 0; i < 10; i++) {\n          mgr.seek(i * 25.0);\n        }\n      }\n      assert(true);"
+      },
+      {
+        "title": "T2.F07.1 - Volume lower boundary clamping: volume < 0.0 clamps to 0.0",
+        "realAssertions": 1,
+        "body": "const audioMod = await loadPlayerModule('js/audioManager.js', env);\n      const AudioMgr = audioMod?.AudioManager || env.window.AudioManager;\n      if (AudioMgr) {\n        const mgr = new AudioMgr();\n        mgr.setVolume(-0.5);\n        assertEqual(mgr.getVolume(), 0.0);\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T2.F07.2 - Volume upper boundary clamping: volume > 1.0 clamps to 1.0",
+        "realAssertions": 1,
+        "body": "const audioMod = await loadPlayerModule('js/audioManager.js', env);\n      const AudioMgr = audioMod?.AudioManager || env.window.AudioManager;\n      if (AudioMgr) {\n        const mgr = new AudioMgr();\n        mgr.setVolume(2.5);\n        assertEqual(mgr.getVolume(), 1.0);\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T2.F07.3 - Muting when volume is already 0.0 unmutes to default 1.0 or previous level",
+        "realAssertions": 1,
+        "body": "const audioMod = await loadPlayerModule('js/audioManager.js', env);\n      const AudioMgr = audioMod?.AudioManager || env.window.AudioManager;\n      if (AudioMgr) {\n        const mgr = new AudioMgr();\n        mgr.setVolume(0.0);\n        mgr.toggleMute();\n        assert(mgr.getVolume() >= 0.0);\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T2.F07.4 - Non-numeric volume input handled safely without corruption",
+        "realAssertions": 1,
+        "body": "const audioMod = await loadPlayerModule('js/audioManager.js', env);\n      const AudioMgr = audioMod?.AudioManager || env.window.AudioManager;\n      if (AudioMgr) {\n        const mgr = new AudioMgr();\n        mgr.setVolume('0.5');\n        assertApprox(mgr.getVolume(), 0.5, 0.05);\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T2.F07.5 - Mute state persists across seeks and stage transitions",
+        "realAssertions": 2,
+        "body": "const audioMod = await loadPlayerModule('js/audioManager.js', env);\n      const AudioMgr = audioMod?.AudioManager || env.window.AudioManager;\n      if (AudioMgr) {\n        const mgr = new AudioMgr();\n        mgr.toggleMute();\n        assert(mgr.isMuted());\n        mgr.seek(100.0);\n        assert(mgr.isMuted(), 'Mute state should persist after seek');\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T2.F08.1 - Timestamps outside any cue render empty or idle subtitle container",
+        "realAssertions": 1,
+        "body": "const subMod = await loadPlayerModule('js/subtitleRenderer.js', env);\n      const SubRenderer = subMod?.SubtitleRenderer || env.window.SubtitleRenderer;\n      if (SubRenderer) {\n        const container = env.document.createElement('div');\n        const renderer = new SubRenderer(container);\n        renderer.loadCues([\n          { id: 'c1', start: 10.0, end: 20.0, text: 'Active cue text' }\n        ]);\n        const cue = renderer.getActiveCue(5.0);\n        assertEqual(cue, null, 'No cue active at 5s');\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T2.F08.5 - Subtitle cue boundary edge cases: exact start timestamp and exact end timestamp",
+        "realAssertions": 1,
+        "body": "const subMod = await loadPlayerModule('js/subtitleRenderer.js', env);\n      const SubRenderer = subMod?.SubtitleRenderer || env.window.SubtitleRenderer;\n      if (SubRenderer) {\n        const container = env.document.createElement('div');\n        const renderer = new SubRenderer(container);\n        renderer.loadCues([\n          { id: 'c1', start: 10.0, end: 20.0, text: 'Boundary cue' }\n        ]);\n        const cueStart = renderer.getActiveCue(10.0);\n        assert(cueStart !== null, 'Active at exact start');\n        const cueEnd = renderer.getActiveCue(20.0);\n        // Either active or transitions to next\n        assert(true);\n      } else {\n        assert(true);\n      }"
+      },
+      {
+        "title": "T2.F10.2 - Synthetic clock handles background tab throttling (large performance.now delta steps)",
+        "realAssertions": 0,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine) {\n        const engine = new Engine({ mode: 'synthetic' });\n        engine.play();\n        if (typeof engine.tick === 'function') {\n          engine.tick(2000); // 2 second tab stall\n        }\n      }\n      assert(true);"
+      },
+      {
+        "title": "T2.F12.3 - Width styling conforms to 520px specification (w-[520px])",
+        "realAssertions": 1,
+        "body": "if (fileExistsInPlayer('css/simulator.css')) {\n        const css = readPlayerFile('css/simulator.css');\n        assert(css.includes('520px') || true);\n      }\n      assert(true);"
+      },
+      {
+        "title": "T2.F13.1 - Event cards stream in chronological order matching pitch timestamps",
+        "realAssertions": 1,
+        "body": "const dataMod = await loadPlayerModule('js/presentationData.js', env);\n      const data = dataMod?.PEOPLEPULSE_PRESENTATION_DATA || env.window.PEOPLEPULSE_PRESENTATION_DATA;\n      const cards = data?.cards || data?.odaeaCards || [];\n      for (let i = 0; i < cards.length - 1; i++) {\n        if (cards[i].timestamp && cards[i + 1].timestamp) {\n          assert(cards[i].timestamp <= cards[i + 1].timestamp, 'Cards must be chronologically ordered');\n        }\n      }\n      assert(true);"
+      },
+      {
+        "title": "T2.F16.1 - Technical Defense Sheet answer 5 details failure adaptation mechanics under the hood",
+        "realAssertions": 0,
+        "body": "const dataMod = await loadPlayerModule('js/presentationData.js', env);\n      assert(true);"
+      },
+      {
+        "title": "T2.F19.4 - Invalid or unrecognized tab name switch request is handled safely without crashing",
+        "realAssertions": 0,
+        "body": "const ctrlMod = await loadPlayerModule('js/interactiveController.js', env);\n      const Controller = ctrlMod?.InteractiveController || env.window.InteractiveController;\n      if (Controller && typeof Controller.prototype.setActiveTab === 'function') {\n        const ctrl = new Controller({});\n        ctrl.setActiveTab('non_existent_tab_123');\n      }\n      assert(true);"
+      }
+    ]
+  },
+  "demo_video_player/tests/tier3_cross_feature.test.mjs": {
+    "total": 24,
+    "onlyTrueCount": 3,
+    "maskedCount": 20,
+    "cleanCount": 1,
+    "onlyTrue": [
+      "T3.13: F03+F09 - 1.5x speed accelerates word-by-word karaoke highlight timing proportionally",
+      "T3.17: F06+F10 - Audio master clock drift correction continuously nudges visual clock to audio currentTime",
+      "T3.18: F08+F09 - Active sentence displays active word token with .karaoke-active class"
+    ],
+    "masked": [
+      {
+        "title": "T3.01: F01+F03 - 1.5x speed during Stage 1 accelerates clock tick proportionally",
+        "realAssertions": 1,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine) {\n        const engine = new Engine({ mode: 'synthetic' });\n        engine.setSpeed(1.5);\n        assertEqual(engine.speed || engine.getSpeed?.(), 1.5);\n      }\n      assert(true);"
+      },
+      {
+        "title": "T3.02: F01+F04 - Seeking via jump marker to Stage 3 correctly updates stage index, cards, and time",
+        "realAssertions": 1,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine && typeof Engine.prototype.jumpToStage === 'function') {\n        const engine = new Engine();\n        engine.jumpToStage(2); // Stage 3 (Action, starts at 90s)\n        assertApprox(engine.getCurrentTime(), 90.0, 0.1);\n      }\n      assert(true);"
+      },
+      {
+        "title": "T3.03: F01+F07 - Muting audio does not halt monotonic timeline advancement",
+        "realAssertions": 2,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const audioMod = await loadPlayerModule('js/audioManager.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      const AudioMgr = audioMod?.AudioManager || env.window.AudioManager;\n      if (Engine && AudioMgr) {\n        const engine = new Engine();\n        const audio = new AudioMgr();\n        audio.toggleMute();\n        assert(audio.isMuted());\n        engine.play();\n        assert(!engine.isPaused);\n      }\n      assert(true);"
+      },
+      {
+        "title": "T3.04: F01+F08 - Advancing timeline keeps subtitle cue and stage indicator in exact synchronization",
+        "realAssertions": 1,
+        "body": "const dataMod = await loadPlayerModule('js/presentationData.js', env);\n      const subMod = await loadPlayerModule('js/subtitleRenderer.js', env);\n      const data = dataMod?.PEOPLEPULSE_PRESENTATION_DATA || env.window.PEOPLEPULSE_PRESENTATION_DATA;\n      const SubRenderer = subMod?.SubtitleRenderer || env.window.SubtitleRenderer;\n      if (SubRenderer && data?.cues) {\n        const container = env.document.createElement('div');\n        const renderer = new SubRenderer(container);\n        renderer.loadCues(data.cues);\n        const cueAt50 = renderer.getActiveCue(50.0);\n        if (cueAt50) {\n          assert(cueAt50.stageId === 2 || cueAt50.stageName?.includes('Decision'));\n        }\n      }\n      assert(true);"
+      },
+      {
+        "title": "T3.05: F01+F11 - Stage 1 timeline rendering synchronizes dashboard KPI cards",
+        "realAssertions": 0,
+        "body": "const sceneMod = await loadPlayerModule('js/sceneSimulator.js', env);\n      const SceneSim = sceneMod?.SceneSimulator || env.window.SceneSimulator;\n      if (SceneSim) {\n        const container = env.document.createElement('div');\n        const sim = new SceneSim(container);\n        sim.update(20.0, SPEC_CONSTANTS.STAGES[0]);\n      }\n      assert(true);"
+      },
+      {
+        "title": "T3.06: F01+F12 - Crossing 45s threshold triggers drawer slide-in animation",
+        "realAssertions": 0,
+        "body": "const sceneMod = await loadPlayerModule('js/sceneSimulator.js', env);\n      const SceneSim = sceneMod?.SceneSimulator || env.window.SceneSimulator;\n      if (SceneSim) {\n        const container = env.document.createElement('div');\n        const sim = new SceneSim(container);\n        sim.update(30.0, SPEC_CONSTANTS.STAGES[0]);\n        sim.update(46.0, SPEC_CONSTANTS.STAGES[1]);\n      }\n      assert(true);"
+      },
+      {
+        "title": "T3.07: F01+F13 - Event cards appear sequentially as timeline crosses respective timestamps",
+        "realAssertions": 0,
+        "body": "const dataMod = await loadPlayerModule('js/presentationData.js', env);\n      const data = dataMod?.PEOPLEPULSE_PRESENTATION_DATA || env.window.PEOPLEPULSE_PRESENTATION_DATA;\n      const cards = data?.cards || data?.odaeaCards || [];\n      const expectedTimestamps = [95, 105, 118, 135, 150];\n      assert(true);"
+      },
+      {
+        "title": "T3.08: F01+F14 - Crossing 160s-175s triggers orange failure card and adaptation state",
+        "realAssertions": 0,
+        "body": "const sceneMod = await loadPlayerModule('js/sceneSimulator.js', env);\n      const SceneSim = sceneMod?.SceneSimulator || env.window.SceneSimulator;\n      if (SceneSim) {\n        const container = env.document.createElement('div');\n        const sim = new SceneSim(container);\n        sim.update(175.0, SPEC_CONSTANTS.STAGES[4]);\n      }\n      assert(true);"
+      },
+      {
+        "title": "T3.09: F02+F06 - Pausing playback pauses audio narration without resetting audio currentTime",
+        "realAssertions": 2,
+        "body": "const audioMod = await loadPlayerModule('js/audioManager.js', env);\n      const AudioMgr = audioMod?.AudioManager || env.window.AudioManager;\n      if (AudioMgr) {\n        const audio = new AudioMgr();\n        audio.seek(75.0);\n        audio.pause();\n        assertApprox(audio.getCurrentTime(), 75.0, 0.1);\n        assert(audio.audioElement.paused);\n      }\n      assert(true);"
+      },
+      {
+        "title": "T3.10: F02+F17 - Pause enables sandbox clickability; play restores automation",
+        "realAssertions": 0,
+        "body": "const ctrlMod = await loadPlayerModule('js/interactiveController.js', env);\n      const Controller = ctrlMod?.InteractiveController || env.window.InteractiveController;\n      if (Controller) {\n        const ctrl = new Controller({});\n        ctrl.onPause();\n        ctrl.onResume();\n      }\n      assert(true);"
+      },
+      {
+        "title": "T3.11: F02+F21 - Play -> Pause -> User clicks around -> Play resumes from exact paused second",
+        "realAssertions": 1,
+        "body": "const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const Engine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      if (Engine) {\n        const engine = new Engine();\n        engine.seek(112.5);\n        engine.pause();\n        const pauseT = engine.getCurrentTime();\n        engine.play();\n        assertApprox(engine.getCurrentTime(), pauseT, 0.05);\n      }\n      assert(true);"
+      },
+      {
+        "title": "T3.12: F03+F06 - Switching speed to 1.25x updates audio.playbackRate and preserves pitch",
+        "realAssertions": 2,
+        "body": "const audioMod = await loadPlayerModule('js/audioManager.js', env);\n      const AudioMgr = audioMod?.AudioManager || env.window.AudioManager;\n      if (AudioMgr) {\n        const audio = new AudioMgr();\n        audio.setRate(1.25);\n        assertEqual(audio.audioElement.playbackRate, 1.25);\n        assert(audio.audioElement.preservesPitch);\n      }\n      assert(true);"
+      },
+      {
+        "title": "T3.14: F04+F08 - Jumping to Stage 5 immediately renders Stage 5 subtitle cue",
+        "realAssertions": 1,
+        "body": "const subMod = await loadPlayerModule('js/subtitleRenderer.js', env);\n      const dataMod = await loadPlayerModule('js/presentationData.js', env);\n      const data = dataMod?.PEOPLEPULSE_PRESENTATION_DATA || env.window.PEOPLEPULSE_PRESENTATION_DATA;\n      const SubRenderer = subMod?.SubtitleRenderer || env.window.SubtitleRenderer;\n      if (SubRenderer && data?.cues) {\n        const container = env.document.createElement('div');\n        const renderer = new SubRenderer(container);\n        renderer.loadCues(data.cues);\n        const cue = renderer.getActiveCue(165.0);\n        if (cue) {\n          assertIncludes(cue.text.toLowerCase(), 'adaptation');\n        }\n      }\n      assert(true);"
+      },
+      {
+        "title": "T3.15: F04+F12 - Jumping from Stage 1 to Stage 4 opens drawer and sets active breadcrumb to Evaluation",
+        "realAssertions": 0,
+        "body": "const sceneMod = await loadPlayerModule('js/sceneSimulator.js', env);\n      const SceneSim = sceneMod?.SceneSimulator || env.window.SceneSimulator;\n      if (SceneSim) {\n        const container = env.document.createElement('div');\n        const sim = new SceneSim(container);\n        sim.update(140.0, SPEC_CONSTANTS.STAGES[3]);\n      }\n      assert(true);"
+      },
+      {
+        "title": "T3.16: F06+F07 - Adjusting volume slider changes audio element volume without stopping narration",
+        "realAssertions": 2,
+        "body": "const audioMod = await loadPlayerModule('js/audioManager.js', env);\n      const AudioMgr = audioMod?.AudioManager || env.window.AudioManager;\n      if (AudioMgr) {\n        const audio = new AudioMgr();\n        await audio.play();\n        audio.setVolume(0.4);\n        assertApprox(audio.getVolume(), 0.4, 0.05);\n        assert(!audio.audioElement.paused);\n      }\n      assert(true);"
+      },
+      {
+        "title": "T3.19: F12+F19 - In open drawer, switching to Tools Registry renders registered schema tools",
+        "realAssertions": 1,
+        "body": "const ctrlMod = await loadPlayerModule('js/interactiveController.js', env);\n      const Controller = ctrlMod?.InteractiveController || env.window.InteractiveController;\n      if (Controller && typeof Controller.prototype.setActiveTab === 'function') {\n        const ctrl = new Controller({});\n        ctrl.setActiveTab('tools');\n        assertEqual(ctrl.activeTab, 'tools');\n      }\n      assert(true);"
+      },
+      {
+        "title": "T3.20: F13+F18 - Clicking JSON details on Stage 3 Action card reveals server-injected organization_id",
+        "realAssertions": 1,
+        "body": "const dataMod = await loadPlayerModule('js/presentationData.js', env);\n      const data = dataMod?.PEOPLEPULSE_PRESENTATION_DATA || env.window.PEOPLEPULSE_PRESENTATION_DATA;\n      const cards = data?.cards || data?.odaeaCards || [];\n      const actionCard = cards.find((c) => c.stage === 3 || c.type === 'action');\n      if (actionCard?.payload) {\n        assertIncludes(JSON.stringify(actionCard.payload), 'organization_id');\n      }\n      assert(true);"
+      },
+      {
+        "title": "T3.22: F17+F19 - Switching to Audit Trail tab during live pause displays credential-masked logs",
+        "realAssertions": 1,
+        "body": "const ctrlMod = await loadPlayerModule('js/interactiveController.js', env);\n      const Controller = ctrlMod?.InteractiveController || env.window.InteractiveController;\n      if (Controller) {\n        const ctrl = new Controller({});\n        ctrl.onPause?.();\n        ctrl.setActiveTab?.('audit');\n        assertEqual(ctrl.activeTab || 'audit', 'audit');\n      }\n      assert(true);"
+      },
+      {
+        "title": "T3.23: F17+F20 - Clicking Approve Action or Deny Action in sandbox executes governance handler",
+        "realAssertions": 1,
+        "body": "const ctrlMod = await loadPlayerModule('js/interactiveController.js', env);\n      const Controller = ctrlMod?.InteractiveController || env.window.InteractiveController;\n      if (Controller && typeof Controller.prototype.handleHitlAction === 'function') {\n        const ctrl = new Controller({});\n        const res = ctrl.handleHitlAction('approve');\n        assert(res !== undefined || true);\n      }\n      assert(true);"
+      },
+      {
+        "title": "T3.24: F21+F19 - Resuming playback after viewing Audit tab switches active tab back to ReAct Copilot trace",
+        "realAssertions": 1,
+        "body": "await loadPlayerModule('js/presentationData.js', env);\n      const sceneMod = await loadPlayerModule('js/sceneSimulator.js', env);\n      const timelineMod = await loadPlayerModule('js/timelineEngine.js', env);\n      const ctrlMod = await loadPlayerModule('js/interactiveController.js', env);\n      const SceneSim = sceneMod?.SceneSimulator || env.window.SceneSimulator;\n      const TimelineEngine = timelineMod?.TimelineEngine || env.window.TimelineEngine;\n      const Controller = ctrlMod?.InteractiveController || env.window.InteractiveController;\n      if (Controller && SceneSim && TimelineEngine) {\n        const sim = new SceneSim();\n        const engine = new TimelineEngine();\n        const ctrl = new Controller({ sceneSimulator: sim, timelineEngine: engine });\n        ctrl.setActiveTab?.('audit');\n        ctrl.onResume?.();\n        assertEqual(ctrl.activeTab || 'react', 'react');\n      }\n      assert(true);"
+      }
+    ]
+  }
+}

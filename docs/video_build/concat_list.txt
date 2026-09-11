@@ -1,0 +1,6 @@
+file 'd:\project\PeoplePulse\docs\video_build\seg_1.mp4'
+file 'd:\project\PeoplePulse\docs\video_build\seg_2.mp4'
+file 'd:\project\PeoplePulse\docs\video_build\seg_3.mp4'
+file 'd:\project\PeoplePulse\docs\video_build\seg_4.mp4'
+file 'd:\project\PeoplePulse\docs\video_build\seg_5.mp4'
+file 'd:\project\PeoplePulse\docs\video_build\seg_6.mp4'

@@ -567,7 +567,7 @@ export default function AdminEmployees({ setMobileOpen }) {
             </div>
 
             {generatedInviteLink ? (
-              <div className="space-y-4 animate-in fade-in duration-200">
+              <div className="space-y-4 animate-fade-in">
                 <div className="p-3.5 rounded-xl bg-emerald-50/80 border border-emerald-200 text-emerald-900 text-xs space-y-1">
                   <div className="flex items-center gap-1.5 font-semibold text-emerald-800">
                     <Check size={14} className="text-emerald-600 shrink-0" />
@@ -643,13 +643,13 @@ export default function AdminEmployees({ setMobileOpen }) {
                     style={{ borderColor: isExistingMember ? "#F59E0B" : T.border }}
                   />
                   {isExistingMember && (
-                    <div className="mt-2 p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center gap-2 animate-in fade-in">
+                    <div className="mt-2 p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs flex items-center gap-2 animate-fade-in">
                       <AlertCircle size={14} className="text-amber-600 shrink-0" />
                       <span>This user is already an active member of this organization.</span>
                     </div>
                   )}
                   {existingPendingInvite && !isExistingMember && (
-                    <div className="mt-2 p-2.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-xs flex items-center justify-between gap-2 animate-in fade-in">
+                    <div className="mt-2 p-2.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-xs flex items-center justify-between gap-2 animate-fade-in">
                       <div className="flex items-center gap-2 min-w-0">
                         <AlertCircle size={14} className="text-blue-600 shrink-0" />
                         <span className="truncate">A pending invite already exists for this email.</span>

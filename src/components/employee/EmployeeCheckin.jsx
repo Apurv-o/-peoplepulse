@@ -383,7 +383,7 @@ export default function EmployeeCheckin({ setMobileOpen, onSubmitted }) {
             <div className="flex items-center gap-2 flex-wrap">
               <p className="text-sm font-semibold" style={{ color: T.text }}>Submit anonymously</p>
               {anon ? (
-                <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1 animate-in fade-in zoom-in-95 duration-200">
+                <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1 animate-scale-in">
                   <ShieldCheck size={11} className="text-emerald-600" /> Identity Protected
                 </span>
               ) : (

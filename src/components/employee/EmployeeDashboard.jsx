@@ -179,7 +179,7 @@ export default function EmployeeDashboard({ setMobileOpen, setView }) {
         right={
           <button
             onClick={() => setView?.("employee-checkin")}
-            className="text-xs font-semibold px-3 py-2 rounded-xl text-white flex items-center gap-1"
+            className="text-xs font-semibold px-3 py-2 rounded-xl text-white flex items-center gap-1 hover:bg-[#344A91] hover:shadow-md transition-all active:scale-[0.97]"
             style={{ background: T.primary }}
           >
             Check in now <ArrowRight size={12} />

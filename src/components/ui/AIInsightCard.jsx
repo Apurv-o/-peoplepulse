@@ -5,10 +5,10 @@ import { T } from "./Tokens";
 export default function AIInsightCard({ text, footnote, className = "" }) {
   return (
     <div
-      className={`rounded-xl p-4 flex gap-3 transition-all duration-200 hover:border-blue-300 hover:shadow-sm ${className}`}
+      className={`group rounded-xl p-4 flex gap-3 transition-all duration-200 hover:border-blue-300 hover:shadow-sm ${className}`}
       style={{ background: "#F5F7FC", border: `1px solid #E3E7F5` }}
     >
-      <div className="w-7 h-7 rounded-lg bg-blue-100/80 flex items-center justify-center shrink-0 mt-0.5 text-blue-600">
+      <div className="w-7 h-7 rounded-lg bg-blue-100/80 flex items-center justify-center shrink-0 mt-0.5 text-blue-600 transition-transform duration-300 group-hover:rotate-12">
         <Sparkles size={15} />
       </div>
       <div className="min-w-0">

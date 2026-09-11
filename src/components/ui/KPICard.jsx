@@ -13,7 +13,7 @@ export default function KPICard({ label, value, unit, delta, deltaSuffix, goodDi
           {label}
         </p>
         <div className="flex items-baseline gap-1 mt-2">
-          <span className="text-3xl font-extrabold tracking-tight" style={{ color: T.text }}>
+          <span className="text-3xl font-extrabold tracking-tight transition-transform duration-200 group-hover:scale-[1.02]" style={{ color: T.text }}>
             {value}
           </span>
           {unit && <span className="text-sm font-medium" style={{ color: T.muted }}>{unit}</span>}

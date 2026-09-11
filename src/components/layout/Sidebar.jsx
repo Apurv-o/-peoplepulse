@@ -79,7 +79,7 @@ export default function Sidebar({ role, setRole, view, setView, mobileOpen, setM
           <div className="flex items-center justify-between">
             <button
               onClick={onReturnHome}
-              className="flex items-center gap-2.5 hover:opacity-85 transition-opacity text-left group"
+              className="flex items-center gap-2.5 hover:opacity-90 transition-opacity text-left group"
               title="Return to Public Homepage"
             >
               <img
@@ -164,7 +164,7 @@ export default function Sidebar({ role, setRole, view, setView, mobileOpen, setM
               <button
                 key={item.key}
                 onClick={() => { setView(item.key); setMobileOpen(false); }}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 relative group hover:translate-x-0.5"
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 relative group hover:translate-x-0.5 hover:bg-gray-50/60 focus-visible:ring-2 focus-visible:ring-blue-400/40 focus-visible:outline-none"
                 style={{
                   background: active ? "#EEF1FA" : "transparent",
                   color: active ? T.primaryDark : T.muted,
@@ -252,7 +252,7 @@ export default function Sidebar({ role, setRole, view, setView, mobileOpen, setM
             </div>
             <button
               onClick={onSignOut}
-              className="p-1.5 rounded-lg hover:bg-white text-gray-400 hover:text-red-600 transition-colors shrink-0"
+              className="p-1.5 rounded-lg hover:bg-white text-gray-400 hover:text-red-600 transition-colors transition-transform active:scale-95 shrink-0"
               title="Sign Out"
               aria-label="Sign Out"
             >

@@ -331,7 +331,7 @@ function Navbar({ onSignIn, onEmployeeSignIn, onGetStarted }) {
 
       {open && (
         <div
-          className="md:hidden max-w-5xl mx-auto mt-2 p-5 rounded-2xl flex flex-col gap-3 text-sm font-medium shadow-xl backdrop-blur-md"
+          className="md:hidden animate-slide-down max-w-5xl mx-auto mt-2 p-5 rounded-2xl flex flex-col gap-3 text-sm font-medium shadow-xl backdrop-blur-md"
           style={{ background: "rgba(255, 255, 255, 0.98)", border: `1px solid ${T.border}`, color: T.text }}
         >
           <button onClick={() => scrollTo("product")} className="text-left py-1.5 hover:text-[#4E6ABF]">
@@ -828,10 +828,10 @@ function ManagerExperience({ onSignIn }) {
           </div>
           <button
             onClick={onSignIn}
-            className="text-sm font-semibold mt-6 flex items-center gap-1.5 hover:underline"
+            className="group text-sm font-semibold mt-6 flex items-center gap-1.5 hover:underline"
             style={{ color: T.primary }}
           >
-            Explore manager insights <ArrowRight size={14} />
+            Explore manager insights <ArrowRight size={14} className="transition-transform group-hover:translate-x-0.5" />
           </button>
         </Reveal>
 

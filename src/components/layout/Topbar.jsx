@@ -250,14 +250,14 @@ export default function Topbar({ title, subtitle, setMobileOpen, right }) {
                             .eq("is_read", false);
                         }
                       }}
-                      className="text-[11px] font-medium text-blue-600 hover:text-blue-700 hover:underline"
+                      className="text-[11px] font-medium text-blue-600 hover:text-blue-700 hover:underline transition-colors"
                     >
                       Mark all read
                     </button>
                   )}
                   <button
                     onClick={() => setNotifOpen(false)}
-                    className="text-gray-400 hover:text-gray-600 p-1 rounded-lg"
+                    className="text-gray-400 hover:text-gray-600 p-1 rounded-lg transition-colors"
                   >
                     <X size={14} />
                   </button>
@@ -280,7 +280,7 @@ export default function Topbar({ title, subtitle, setMobileOpen, right }) {
 
               <div className="divide-y max-h-72 overflow-y-auto" style={{ borderColor: T.border }}>
                 {notifications.map((n) => (
-                  <div key={n.id} className="py-2.5 space-y-0.5">
+                  <div key={n.id} className="py-2.5 space-y-0.5 hover:bg-gray-50 rounded-lg transition-colors cursor-pointer">
                     <div className="flex items-center justify-between">
                       <p className="text-xs font-bold flex items-center gap-1.5" style={{ color: T.text }}>
                         {!n.is_read && <span className="w-1.5 h-1.5 rounded-full bg-blue-600 shrink-0" />}

@@ -22,12 +22,12 @@ export default function ToggleSwitch({ checked, onChange, disabled = false, aria
       }}
     >
       <span
-        className={`pointer-events-none flex items-center justify-center h-6 w-6 transform rounded-full bg-white shadow-[0_2px_5px_rgba(0,0,0,0.18)] transition-all duration-300 cubic-bezier(0.34, 1.56, 0.64, 1) group-active:scale-95 ${
+        className={`pointer-events-none flex items-center justify-center h-6 w-6 transform rounded-full bg-white shadow-[0_2px_5px_rgba(0,0,0,0.18)] transition-all duration-300 ease-spring group-active:scale-95 ${
           checked ? "translate-x-5" : "translate-x-0"
         }`}
       >
         {checked ? (
-          <ShieldCheck size={12} className="text-[#4E6ABF] animate-in zoom-in-75 duration-200" />
+          <ShieldCheck size={12} className="text-[#4E6ABF] animate-scale-in" />
         ) : (
           <span className="w-1.5 h-1.5 rounded-full bg-gray-300" />
         )}

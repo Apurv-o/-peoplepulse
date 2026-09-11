@@ -585,7 +585,7 @@ export default function LoginView({ onSignIn, onReturnHome, initialMode = "login
 
               {/* Feedback Messages */}
               {isDuplicateAccountError ? (
-                <div className="mb-5 p-4 rounded-2xl bg-amber-50/90 border border-amber-200 text-amber-950 text-xs shadow-xs animate-in fade-in duration-200 space-y-2.5">
+                <div className="mb-5 p-4 rounded-2xl bg-amber-50/90 border border-amber-200 text-amber-950 text-xs shadow-xs animate-fade-in space-y-2.5">
                   <div className="flex items-start gap-2.5">
                     <div className="w-6 h-6 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center shrink-0 mt-0.5">
                       <AlertCircle size={14} />
@@ -854,12 +854,12 @@ export default function LoginView({ onSignIn, onReturnHome, initialMode = "login
       {/* Real-time Password Reset Modal */}
       {showForgotModal && typeof document !== "undefined" && createPortal(
         <div
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[9999] flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 modal-backdrop"
           onClick={(e) => {
             if (e.target === e.currentTarget) setShowForgotModal(false);
           }}
         >
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 sm:p-7 border border-gray-100 relative animate-in fade-in zoom-in-95 duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 sm:p-7 border border-gray-100 relative animate-scale-in modal-dialog">
             <button
               type="button"
               onClick={() => setShowForgotModal(false)}
