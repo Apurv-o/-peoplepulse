@@ -108,9 +108,17 @@ export default function AgenticCopilot({ isOpen, onToggle }) {
   const orgId = activeOrganization?.id;
 
   // Load audit activities
-  const loadActivities = () => {
+  const loadActivities = async () => {
     if (orgId) {
-      setActivities(agentAudit.getRecent(orgId, 30));
+      try {
+        const list = await agentAudit.getRecent(orgId, 30);
+        setActivities(Array.isArray(list) ? list : []);
+      } catch (err) {
+        console.warn("[AgenticCopilot] Failed to load activities:", err);
+        setActivities([]);
+      }
+    } else {
+      setActivities([]);
     }
   };
 
@@ -403,7 +411,7 @@ export default function AgenticCopilot({ isOpen, onToggle }) {
                 : "border-transparent text-gray-500 hover:text-gray-800"
             }`}
           >
-            <Activity size={14} /> Audit Trail ({activities.length})
+            <Activity size={14} /> Audit Trail ({Array.isArray(activities) ? activities.length : 0})
           </button>
           <button
             onClick={() => setActiveTab("tools")}
@@ -737,40 +745,57 @@ export default function AgenticCopilot({ isOpen, onToggle }) {
                 Autonomous Action Trail
               </p>
               <button
-                onClick={() => agentAudit.clear(orgId) || loadActivities()}
-                className="text-[10px] text-gray-400 hover:text-red-600 cursor-pointer"
+                onClick={async () => {
+                  agentAudit.clear(orgId);
+                  await loadActivities();
+                }}
+                className="text-[10px] text-gray-400 hover:text-red-600 cursor-pointer transition-colors"
               >
                 Clear History
               </button>
             </div>
-            {activities.length === 0 ? (
+            {!Array.isArray(activities) || activities.length === 0 ? (
               <div className="py-12 text-center text-xs text-gray-400">
                 No agent operations recorded yet in this organization session.
               </div>
             ) : (
-              activities.map((act) => (
-                <div key={act.id} className="p-3 rounded-xl bg-white border border-gray-200 shadow-2xs text-xs">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="font-bold text-gray-800 font-mono text-[11px]">{act.tool}</span>
-                    <span
-                      className={`text-[9px] font-bold px-1.5 py-0.2 rounded uppercase ${
-                        act.status === "completed"
-                          ? "bg-emerald-50 text-emerald-700"
-                          : act.status === "failed"
-                          ? "bg-red-50 text-red-700"
-                          : "bg-blue-50 text-blue-700"
-                      }`}
-                    >
-                      {act.status}
-                    </span>
+              activities.map((act) => {
+                const goalText = typeof act.goal === "string"
+                  ? act.goal
+                  : act.goal
+                  ? JSON.stringify(act.goal)
+                  : "Autonomous operation";
+                const userText = typeof act.userEmail === "string" && act.userEmail.includes("@")
+                  ? act.userEmail.split("@")[0]
+                  : (act.userEmail || "system");
+                const timeText = act.timestamp && !isNaN(new Date(act.timestamp).getTime())
+                  ? new Date(act.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                  : "recently";
+
+                return (
+                  <div key={act.id || Math.random()} className="p-3 rounded-xl bg-white border border-gray-200 shadow-2xs text-xs">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-bold text-gray-800 font-mono text-[11px]">{act.tool || "operation"}</span>
+                      <span
+                        className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase ${
+                          act.status === "completed"
+                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200/60"
+                            : act.status === "failed"
+                            ? "bg-red-50 text-red-700 border border-red-200/60"
+                            : "bg-blue-50 text-blue-700 border border-blue-200/60"
+                        }`}
+                      >
+                        {act.status || "completed"}
+                      </span>
+                    </div>
+                    <p className="text-gray-600 text-[11px] mb-1.5 leading-snug">{goalText}</p>
+                    <div className="text-[10px] text-gray-400 flex items-center justify-between pt-1 border-t border-gray-100">
+                      <span>{timeText}</span>
+                      <span>User: {userText}</span>
+                    </div>
                   </div>
-                  <p className="text-gray-600 text-[11px] mb-1.5">{act.goal}</p>
-                  <div className="text-[10px] text-gray-400 flex items-center justify-between pt-1 border-t border-gray-100">
-                    <span>{new Date(act.timestamp).toLocaleTimeString()}</span>
-                    <span>User: {act.userEmail?.split("@")[0]}</span>
-                  </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         )}
