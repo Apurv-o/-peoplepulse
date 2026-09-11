@@ -1,6 +1,10 @@
 /**
  * PeoplePulse — PulseAgent Activity Audit Store & Secret Redactor
+ * Persists to Supabase `agent_activity_logs` table (migration 032)
+ * with fast local cache for reactive UI and offline resilience.
  */
+
+import { supabase } from "../supabase.js";
 
 const SECRET_PATTERNS = [
   /password/i,
@@ -53,51 +57,116 @@ export function sanitizePayload(payload) {
 const STORAGE_PREFIX = "peoplepulse_agent_audit_";
 
 export const agentAudit = {
-  record({ organizationId, userId, userEmail, goal, tool, input, status, outcome, adaptation }) {
-    if (typeof window === "undefined" || !organizationId) return null;
+  async record({ organizationId, userId, userEmail, goal, tool, input, status, outcome, adaptation }) {
+    if (!organizationId) return null;
+
+    const sanitizedInput = sanitizePayload(input || {});
+    const sanitizedGoal = sanitizePayload(goal || "Autonomous Task");
+    const sanitizedOutcome = sanitizePayload(outcome || "");
+    const sanitizedAdaptation = adaptation ? sanitizePayload(adaptation) : null;
 
     const record = {
       id: "act_" + Date.now() + "_" + Math.random().toString(36).substring(2, 7),
       timestamp: new Date().toISOString(),
       organizationId,
-      userId: userId || "system",
+      userId: userId || null,
       userEmail: userEmail || "anonymous",
-      goal: sanitizePayload(goal || "Autonomous Task"),
+      goal: sanitizedGoal,
       tool: tool || "orchestrator",
-      input: sanitizePayload(input || {}),
-      status: status || "completed", // "started" | "completed" | "failed" | "adapted"
-      outcome: sanitizePayload(outcome || ""),
-      adaptation: adaptation ? sanitizePayload(adaptation) : null,
+      input: sanitizedInput,
+      status: status || "completed", // "started" | "completed" | "failed" | "adapted" | "blocked"
+      outcome: sanitizedOutcome,
+      adaptation: sanitizedAdaptation,
     };
 
+    // 1. Update local reactive cache for immediate UI feedback
     try {
-      const key = STORAGE_PREFIX + organizationId;
-      const raw = localStorage.getItem(key);
-      const list = raw ? JSON.parse(raw) : [];
-      list.unshift(record);
-      // Retain max 100 historical logs per organization
-      const trimmed = list.slice(0, 100);
-      localStorage.setItem(key, JSON.stringify(trimmed));
-      // Dispatch storage event for UI reactivity across tabs
-      window.dispatchEvent(new CustomEvent("peoplepulse_agent_activity_update", { detail: record }));
+      if (typeof window !== "undefined") {
+        const key = STORAGE_PREFIX + organizationId;
+        const raw = localStorage.getItem(key);
+        const list = raw ? JSON.parse(raw) : [];
+        list.unshift(record);
+        const trimmed = list.slice(0, 100);
+        localStorage.setItem(key, JSON.stringify(trimmed));
+        window.dispatchEvent(new CustomEvent("peoplepulse_agent_activity_update", { detail: record }));
+      }
     } catch (e) {
-      console.warn("[PulseAgent Audit] Failed to persist activity record:", e);
+      console.warn("[PulseAgent Audit] Local cache write notice:", e);
+    }
+
+    // 2. Persist directly to Supabase agent_activity_logs table (Migration 032)
+    if (supabase) {
+      try {
+        const { error: dbErr } = await supabase
+          .from("agent_activity_logs")
+          .insert({
+            organization_id: organizationId,
+            user_id: userId && userId !== "system" ? userId : null,
+            goal: typeof sanitizedGoal === "string" ? sanitizedGoal : JSON.stringify(sanitizedGoal),
+            tool: tool || "orchestrator",
+            status: ["started", "completed", "failed", "adapted", "blocked"].includes(status) ? status : "completed",
+            input_sanitized: sanitizedInput,
+            outcome: typeof sanitizedOutcome === "string" ? sanitizedOutcome : JSON.stringify(sanitizedOutcome),
+            adaptation_details: sanitizedAdaptation,
+          });
+
+        if (dbErr) {
+          console.warn("[PulseAgent Audit] Database persistence notice:", dbErr.message);
+        }
+      } catch (err) {
+        console.warn("[PulseAgent Audit] Network persistence notice:", err);
+      }
     }
 
     return record;
   },
 
-  getRecent(organizationId, limit = 20) {
-    if (typeof window === "undefined" || !organizationId) return [];
+  async getRecent(organizationId, limit = 30) {
+    if (!organizationId) return [];
+
+    // Attempt to load from authoritative database table first
+    if (supabase) {
+      try {
+        const { data: dbLogs, error } = await supabase
+          .from("agent_activity_logs")
+          .select("id, organization_id, user_id, goal, tool, status, input_sanitized, outcome, adaptation_details, created_at")
+          .eq("organization_id", organizationId)
+          .order("created_at", { ascending: false })
+          .limit(limit);
+
+        if (!error && Array.isArray(dbLogs) && dbLogs.length > 0) {
+          return dbLogs.map((log) => ({
+            id: log.id,
+            timestamp: log.created_at,
+            organizationId: log.organization_id,
+            userId: log.user_id,
+            goal: log.goal,
+            tool: log.tool,
+            input: log.input_sanitized,
+            status: log.status,
+            outcome: log.outcome,
+            adaptation: log.adaptation_details,
+          }));
+        }
+      } catch (e) {
+        // Fall back to local cache if offline or unauthenticated
+      }
+    }
+
+    // Fallback: load from local storage
     try {
-      const key = STORAGE_PREFIX + organizationId;
-      const raw = localStorage.getItem(key);
-      if (!raw) return [];
-      const list = JSON.parse(raw);
-      return Array.isArray(list) ? list.slice(0, limit) : [];
+      if (typeof window !== "undefined") {
+        const key = STORAGE_PREFIX + organizationId;
+        const raw = localStorage.getItem(key);
+        if (!raw) return [];
+        const list = JSON.parse(raw);
+        return Array.isArray(list) ? list.slice(0, limit) : [];
+      }
     } catch (e) {
       return [];
     }
+
+    return [];
   },
 
   clear(organizationId) {

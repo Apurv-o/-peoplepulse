@@ -63,7 +63,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: "trigger_manager_action_brief",
-    description: "Generates an actionable 1:1 coaching brief and intervention recommendations for team leadership.",
+    description: "Generates an actionable 1:1 coaching brief and intervention recommendations for team leadership using Gemini AI.",
     permission: "manager",
     risk: TOOL_RISK_LEVELS.READ,
     requiresConfirmation: false,
@@ -203,7 +203,7 @@ class ToolRegistry {
     });
 
     if (!authCheck.authorized) {
-      agentAudit.record({
+      await agentAudit.record({
         organizationId: activeOrgId,
         userId: user?.id,
         userEmail: user?.email,
@@ -215,12 +215,46 @@ class ToolRegistry {
       throw new Error(`Authorization failed: ${authCheck.reason}`);
     }
 
+    // Human Confirmation Check for Sensitive or Destructive Tools
+    if (authCheck.requiresConfirmation && !context.isConfirmed) {
+      if (typeof context.onRequestConfirmation === "function") {
+        const approved = await context.onRequestConfirmation({
+          tool: toolName,
+          args: scopedArgs,
+          message: authCheck.confirmationMessage,
+        });
+        if (!approved) {
+          await agentAudit.record({
+            organizationId: activeOrgId,
+            userId: user?.id,
+            userEmail: user?.email,
+            tool: toolName,
+            input: scopedArgs,
+            status: "blocked",
+            outcome: "Human administrator confirmation denied.",
+          });
+          throw new Error("Action cancelled: Explicit confirmation denied.");
+        }
+      } else {
+        await agentAudit.record({
+          organizationId: activeOrgId,
+          userId: user?.id,
+          userEmail: user?.email,
+          tool: toolName,
+          input: scopedArgs,
+          status: "blocked",
+          outcome: "Human confirmation required before execution.",
+        });
+        throw new Error(`CONFIRMATION_REQUIRED: ${authCheck.confirmationMessage || "Action requires explicit administrator confirmation."}`);
+      }
+    }
+
     // Execute real tool handler
     try {
       const result = await tool.handler(scopedArgs);
 
       // Record in safe audit store
-      agentAudit.record({
+      await agentAudit.record({
         organizationId: activeOrgId,
         userId: user?.id,
         userEmail: user?.email,
@@ -232,7 +266,7 @@ class ToolRegistry {
 
       return result;
     } catch (err) {
-      agentAudit.record({
+      await agentAudit.record({
         organizationId: activeOrgId,
         userId: user?.id,
         userEmail: user?.email,
