@@ -1,4 +1,4 @@
-﻿# Logs
+# Logs
 logs
 *.log
 npm-debug.log*
@@ -32,3 +32,4 @@ test_daily_flow.mjs
 # Supabase local temp
 supabase/.temp
 supabase/.branches
+~$*
