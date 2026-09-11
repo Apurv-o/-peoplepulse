@@ -963,51 +963,6 @@ function FeatureGrid() {
   );
 }
 
-/* ============================================================
-   FINAL CTA
-   ============================================================ */
-function FinalCTA({ onSignIn, onGetStarted }) {
-  const scrollTo = (id) => {
-    const el = document.getElementById(id);
-    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
-
-  return (
-    <section className="px-4 sm:px-8 py-20">
-      <Reveal>
-        <div
-          className="max-w-4xl mx-auto text-center rounded-3xl px-8 py-16 relative overflow-hidden shadow-2xl"
-          style={{ background: `linear-gradient(160deg, ${T.primary}, ${T.primaryDark})` }}
-        >
-          <div className="relative z-10">
-            <h2 className="text-3xl sm:text-4xl font-bold text-white leading-tight tracking-tight">
-              Start listening to your organization.
-            </h2>
-            <p className="text-white/80 mt-4 max-w-md mx-auto leading-relaxed text-sm sm:text-base">
-              Give employees a simple way to speak up and managers a clearer way to understand what is changing.
-            </p>
-            <div className="flex flex-wrap items-center justify-center gap-3 mt-8">
-              <button
-                onClick={onGetStarted}
-                className="text-sm font-semibold px-6 py-3 rounded-xl bg-white flex items-center gap-1.5 transition-transform hover:-translate-y-0.5 hover:shadow-lg"
-                style={{ color: T.primaryDark }}
-              >
-                Get started free <ArrowRight size={15} />
-              </button>
-              <button
-                onClick={() => scrollTo("product")}
-                className="text-sm font-semibold px-6 py-3 rounded-xl border border-white/40 text-white hover:bg-white/10 transition-colors"
-              >
-                Explore the product
-              </button>
-            </div>
-            <p className="text-xs text-white/60 mt-5">60-second daily check-ins · Privacy-first · No credit card required</p>
-          </div>
-        </div>
-      </Reveal>
-    </section>
-  );
-}
 
 /* ============================================================
    FOOTER
@@ -1077,7 +1032,6 @@ export default function PeoplePulseHomepage({ onSignIn, onEmployeeSignIn, onGetS
       <ManagerExperience onSignIn={handleSignIn} />
       <EmployeeExperience />
       <FeatureGrid />
-      <FinalCTA onSignIn={handleSignIn} onGetStarted={handleGetStarted} />
       <Footer onSignIn={handleSignIn} onEmployeeSignIn={handleEmployeeSignIn} />
     </div>
   );
