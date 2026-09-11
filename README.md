@@ -115,13 +115,13 @@ All agent operations are restricted to allowlisted, schema-enforced tools with s
 
 ---
 
-## 7. IIT Bhubaneswar Tech Zephyr 4.0 — Hackathon Rubric Compliance
+## 7. IIT Bhubaneswar Tech Zephyr 4.0 — Technical Rubric Alignment
 
-| Judging Dimension | Tech Zephyr 4.0 Requirement | PeoplePulse Implementation | Verified Score |
-| :--- | :--- | :--- | :---: |
-| **Autonomous Execution** | Move beyond chatbots to multi-step reasoning and autonomous execution. | **Autonomous ReAct Agent Loop**: Runs iterative steps using Google Gemini Function Calling until the goal is fully achieved. | **10 / 10** |
-| **Observe-Decide-Act-Evaluate-Adapt** | Loop must show clear observation, evaluation, and dynamic strategy adaptation. | **Live Real-time Events**: Emits `GOAL`, `DECISION`, `TOOL_START`, `TOOL_RESULT`, `OBSERVATION`, `EVALUATION`, `ADAPTATION`, and `FINAL`. | **10 / 10** |
-| **Tool Interaction** | Effective utilization of external/database tools via structured schemas. | **Standard JSON Schemas**: Tools declare standard parameter types, descriptions, and required constraints (`toolRegistry.js`). | **10 / 10** |
-| **Dynamic Adaptation** | System adapts behavior when encountering environmental failure. | **Real Network Interception**: Catches actual network/503 exceptions, triggers `ADAPTATION` event, and switches to emergency in-app queue. | **10 / 10** |
-| **Data Privacy & Security** | Safe execution without exposing private employee data. | **Differential Privacy**: $n \ge 3$ threshold enforced at PostgreSQL RLS layer; zero anonymous token or identity exposure. | **10 / 10** |
-| **Production Readiness** | Live deployment and functional reliability. | **Vercel + Supabase Live**: Zero-crash dynamic fallback planner ensures 100% demo resilience with or without API key. | **10 / 10** |
+| Evaluation Dimension | Tech Zephyr 4.0 Requirement | PeoplePulse Architecture & Implementation |
+| :--- | :--- | :--- |
+| **Autonomous Execution** | Multi-step reasoning and autonomous execution beyond single-turn chatbots. | **Autonomous ReAct Agent Loop**: Iterative goal-driven reasoning using Google Gemini 2.0 Flash Function Calling, maintaining context across multi-step investigations (`agentEngine.js`). |
+| **ODAEA Architecture** | Rigorous Observe → Decide → Act → Evaluate → Adapt cycle. | **Data-Driven ReAct Events**: Real-time event streaming (`GOAL`, `DECISION`, `TOOL_START`, `TOOL_RESULT`, `OBSERVATION`, `EVALUATION`, `ADAPTATION`, `CONFIRMATION_REQUIRED`, `FINAL`) with data-driven outcome analysis. |
+| **Tool Interaction** | Effective utilization of external/database tools via structured JSON schemas. | **Allowlisted Tool Registry**: Tools specify OpenAPI/Gemini parameter schemas, descriptions, and required fields. `organization_id` is securely injected from session context (`toolRegistry.js`). |
+| **Dynamic Adaptation** | Autonomous behavior adjustment upon encountering environmental failure. | **Real-Time Network Interception**: Actively catches network timeouts / HTTP 503 exceptions, triggers the `ADAPTATION` event, and reroutes mission-critical notices to the backup in-app queue. |
+| **Data Privacy & Security** | Safe execution preserving employee confidentiality and tenant boundaries. | **Cryptographic & RLS Guarantees**: PostgreSQL Row Level Security enforces $n \ge 3$ aggregation suppression, strict tenant isolation, SHA-256 invitation token hashing, and credential redaction (`039_security_hardening_v2.sql`). |
+| **Production Readiness** | Reliable live deployment and operational resilience. | **Vercel + Supabase Production**: Offline fallback planner provides seamless execution continuity when API keys are absent or rate-limited. |

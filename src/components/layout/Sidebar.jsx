@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 
 import { useAuth } from "../../lib/auth";
 import { useOrganization } from "../../lib/organization";
-import { T } from "../ui";
+import { T, Avatar } from "../ui";
 import {
   Home, MessageSquare, TrendingUp, Users, UserPlus, Layers, ListChecks, UploadCloud,
   Settings, Bell, ChevronDown, Lock, ArrowRight, Search, Menu, X, Sparkles,

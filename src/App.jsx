@@ -1,7 +1,11 @@
 import React, { useState, useEffect, useRef } from "react";
 import { WifiOff, RefreshCw, AlertTriangle, CheckCircle2 } from "lucide-react";
 import PeoplePulseHomepage from "./components/PeoplePulseHomepage";
-import PeoplePulseApp, { LoginView, OnboardingModal, AcceptInviteView, ResetPasswordView } from "./components/PeoplePulseApp";
+import PeoplePulseApp from "./components/PeoplePulseApp";
+import LoginView from "./components/auth/LoginView";
+import OnboardingModal from "./components/auth/OnboardingModal";
+import AcceptInviteView from "./components/auth/AcceptInviteView";
+import ResetPasswordView from "./components/auth/ResetPasswordView";
 import { AuthProvider, useAuth } from "./lib/auth";
 import { OrganizationProvider, useOrganization } from "./lib/organization";
 
