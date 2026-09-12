@@ -1,5 +1,4 @@
 import React, { useEffect, useRef, useState } from "react";
-import backgroundVideo from "@video";
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell,
 } from "recharts";
@@ -129,62 +128,16 @@ function NetworkScene() {
 }
 
 /* ============================================================
-   3D BACKGROUND VIDEO COMPONENT (Subtle, Infinite, Silent)
-   Uses the actual existing video file directly.
+   HERO BACKGROUND COMPONENT (Lightweight, Interactive SVG Network)
    ============================================================ */
 function Background3DHeroVideo() {
-  const videoRef = useRef(null);
-
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    // Strict audio disablement: Guarantee mute and zero volume
-    video.muted = true;
-    video.volume = 0;
-
-    const playVideo = () => {
-      const promise = video.play();
-      if (promise !== undefined) {
-        promise.catch((err) => {
-          console.debug("Video autoplay state:", err?.message);
-        });
-      }
-    };
-
-    playVideo();
-  }, []);
-
   return (
     <div
       className="absolute inset-0 overflow-hidden select-none pointer-events-none"
       aria-hidden="true"
       style={{ pointerEvents: "none" }}
     >
-      {/* 3D Background Video */}
-      <video
-        ref={videoRef}
-        src={backgroundVideo}
-        autoPlay
-        muted
-        loop
-        playsInline
-        aria-hidden="true"
-        tabIndex={-1}
-        className="absolute right-[-8%] sm:right-[-2%] lg:right-[0%] top-[-5%] w-[120%] sm:w-[95%] lg:w-[66%] max-w-[860px] h-[115%] object-cover opacity-85 transition-opacity duration-1000 motion-reduce-hide"
-        style={{
-          maskImage:
-            "radial-gradient(ellipse 72% 70% at 65% 45%, black 40%, rgba(0,0,0,0.6) 65%, transparent 92%)",
-          WebkitMaskImage:
-            "radial-gradient(ellipse 72% 70% at 65% 45%, black 40%, rgba(0,0,0,0.6) 65%, transparent 92%)",
-          pointerEvents: "none",
-        }}
-      />
-
-      {/* Reduced-motion / graceful fallback network */}
-      <div className="hidden motion-reduce:block">
-        <NetworkScene />
-      </div>
+      <NetworkScene />
 
       {/* Left side soft gradient mask for clear copy contrast */}
       <div
