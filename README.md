@@ -1,4 +1,4 @@
-# PeoplePulse — Enterprise Multi-Tenant B2B SaaS
+# PeoplePulse
 
 PeoplePulse is a production-grade, multi-tenant employee engagement and sentiment analytics platform built with React (Vite, Tailwind CSS, Lucide, Recharts) and Supabase (PostgreSQL, Row-Level Security, Edge Functions, Gemini AI).
 
@@ -7,40 +7,42 @@ PeoplePulse is a production-grade, multi-tenant employee engagement and sentimen
 ## 1. Multi-Tenant Architecture & Data Isolation
 
 ### Tenancy Model
-- **Organizations (organizations)**: The root tenant model supporting multi-company isolation. Each organization has a name, unique URL slug, creation timestamp, and subscription plan tier (ree | pro | enterprise).
+- **Organizations (organizations)**: The root tenant model supporting multi-company isolation. Each organization has a name, unique URL slug, creation timestamp, and subscription plan tier (`free` | `pro` | `enterprise`).
 - **Organization Memberships (organization_members)**: Maps users to organizations with explicit roles:
-  - owner: Full administrative rights, billing, org settings, team and member management.
-  - dmin: Member invitations, team management, org analytics.
-  - manager: Scoped to manage specific teams and view aggregated team metrics ( \ge 3$).
-  - employee: Submits weekly check-ins (named or strictly anonymous) and views personal wellbeing history.
+  - `owner`: Full administrative rights, billing, org settings, team and member management.
+  - `admin`: Member invitations, team management, org analytics.
+  - `manager`: Scoped to manage specific teams and view aggregated team metrics ($n \ge 3$).
+  - `employee`: Submits weekly check-ins (named or strictly anonymous) and views personal wellbeing history.
 - **Tenant Scoping Across Tables**:
-  - 	eams.organization_id
-  - checkins.organization_id
-  - sentiment_results.organization_id
-  - invitations.organization_id
-  - organization_usage.organization_id
+  - `teams.organization_id`
+  - `checkins.organization_id`
+  - `sentiment_results.organization_id`
+  - `invitations.organization_id`
+  - `organization_usage.organization_id`
 
 ### Row-Level Security (RLS)
 All tenant tables enforce strict PostgreSQL Row-Level Security:
-- Direct cross-tenant access is rejected at the database engine level using uth.uid() in (select user_id from organization_members where organization_id = ...).
-- Anonymous check-ins strictly preserve user_id = NULL. Direct SELECT access to anonymous rows is prohibited for employee and manager roles.
-- Manager metrics and feedback are computed via security-definer RPC functions (get_team_aggregated_insights) enforcing the  \ge 3$ aggregation threshold.
+- Direct cross-tenant access is rejected at the database engine level using `auth.uid() in (select user_id from organization_members where organization_id = ...)`.
+- Anonymous check-ins strictly preserve `user_id = NULL`. Direct SELECT access to anonymous rows is prohibited for employee and manager roles.
+- Manager metrics and feedback are computed via security-definer RPC functions (`get_team_aggregated_insights`) enforcing the $n \ge 3$ aggregation threshold.
 
 ---
 
 ## 2. Privacy & Anonymity Invariants
 
 1. **Database-Level Constraint**:
-   `sql
+   ```sql
    constraint check_anonymous_user_id check (
      (is_anonymous = true and user_id is null) or
      (is_anonymous = false and user_id is not null)
    )
-   `
+   ```
 2. **Atomic Token Consumption**:
-   Anonymous check-ins generate a cryptographically random client-side UUID processing_token. Edge Functions invoke consume_anonymous_processing_token to atomically clear the token upon sentiment analysis, ensuring tokens cannot be re-used or linked to identity.
-3. **Differential Privacy & Sample Protection ( \ge 3$)**:
+   Anonymous check-ins generate a cryptographically random client-side UUID `processing_token`. Edge Functions invoke `consume_anonymous_processing_token` to atomically clear the token upon sentiment analysis, ensuring tokens cannot be re-used or linked to identity.
+3. **Differential Privacy & Sample Protection ($n \ge 3$)**:
    Managers and admins cannot view team engagement averages or anonymous text comments unless at least 3 distinct submissions exist for that weekly cycle.
+
+---
 
 ## 3. Invitation Lifecycle & Token Security
 
