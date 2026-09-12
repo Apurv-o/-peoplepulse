@@ -42,33 +42,15 @@ All tenant tables enforce strict PostgreSQL Row-Level Security:
 3. **Differential Privacy & Sample Protection ( \ge 3$)**:
    Managers and admins cannot view team engagement averages or anonymous text comments unless at least 3 distinct submissions exist for that weekly cycle.
 
----
-
-## 3. Plan Limits & AI Quota Enforcement
-
-| Dimension | Free Tier | Pro Tier | Enterprise Tier |
-| :--- | :--- | :--- | :--- |
-| **Active Seats** | 10 seats | 100 seats | Custom / Unlimited |
-| **Teams** | 1 team | Unlimited | Unlimited |
-| **Monthly AI Quota** | 10 analyses / month | Unlimited | Unlimited |
-| **Privacy Threshold** |  \ge 3$ strictly enforced |  \ge 3$ strictly enforced |  \ge 3$ strictly enforced |
-
-Limits are enforced through database triggers:
-- 	rg_enforce_org_seat_limit: Prevents inserting more members into organization_members than permitted by the plan.
-- 	rg_enforce_org_team_limit: Enforces max teams per organization.
-- consume_org_ai_quota: Atomically decrements and verifies AI sentiment analysis quota before the Edge Function calls Google Gemini.
-
----
-
-## 4. Invitation Lifecycle & Token Security
+## 3. Invitation Lifecycle & Token Security
 
 - Invitations are generated with cryptographically secure random 32-byte tokens.
-- Tokens are stored exclusively as SHA-256 hashes (	oken_hash = digest(token, 'sha256')). Raw tokens are never persisted in the database.
-- Joining an organization requires calling ccept_org_invitation(p_token) with a valid authenticated session matching the invited email.
+- Tokens are stored exclusively as SHA-256 hashes (`token_hash = digest(token, 'sha256')`). Raw tokens are never persisted in the database.
+- Joining an organization requires calling `accept_org_invitation(p_token)` with a valid authenticated session matching the invited email.
 
 ---
 
-## 5. End-to-End Verification
+## 4. End-to-End Verification
 
 Automated browser CDP testing validates:
 - [x] Public Homepage rendering and CTA navigation
@@ -76,13 +58,13 @@ Automated browser CDP testing validates:
 - [x] Real login for Alex Morgan (alex.morgan@company.com) showing real database check-in score (80), week label (Aug 31), and Acme Corp workspace badge
 - [x] Duplicate check-in submission guard (You've already submitted your check-in for this week)
 - [x] Session persistence across #app and auto-forwarding from #login
-- [x] Sarah Patel Manager dashboard rendering aggregated metrics and \ge 3$ privacy lock
-- [x] System Admin overview rendering organization members, teams list, and live plan limits / AI quota
+- [x] Sarah Patel Manager dashboard rendering aggregated metrics and $\ge 3$ privacy lock
+- [x] System Admin overview rendering organization members, teams list, and live participation metrics
 - [x] Zero leak of service-role keys or GEMINI_API_KEY in production client bundles
 
 ---
 
-## 6. PulseAgent — Autonomous ReAct Agent Architecture (Agentic AI Track)
+## 5. PulseAgent — Autonomous ReAct Agent Architecture (Agentic AI Track)
 
 PeoplePulse features **PulseAgent**, an autonomous enterprise HR agent built specifically to demonstrate the five-stage agentic loop: **Observe → Decide → Act → Evaluate → Adapt**.
 
@@ -115,7 +97,7 @@ All agent operations are restricted to allowlisted, schema-enforced tools with s
 
 ---
 
-## 7. IIT Bhubaneswar Tech Zephyr 4.0 — Technical Rubric Alignment
+## 6. IIT Bhubaneswar Tech Zephyr 4.0 — Technical Rubric Alignment
 
 | Evaluation Dimension | Tech Zephyr 4.0 Requirement | PeoplePulse Architecture & Implementation |
 | :--- | :--- | :--- |
